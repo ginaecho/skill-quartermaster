@@ -82,6 +82,16 @@ def test_compile_apply_with_yes(env):
     assert reg.get("weird").state == DEMOTED
 
 
+def test_compile_refuses_vague_intent(env, capsys):
+    make_skill(env, "rusty", description="rust cargo helper")
+    make_skill(env, "weird", description="unrelated")
+    rc = main(["compile", "the a to", "--yes"])  # only stop-words
+    assert rc == 1
+    assert "matched no skills" in capsys.readouterr().out
+    # nothing demoted
+    assert Registry.load(skills_dir=env).get("rusty").state == ACTIVE
+
+
 def test_review_dry_run(env, capsys):
     import time
     make_skill(env, "stale")
@@ -96,3 +106,83 @@ def test_log_command(env, capsys):
     main(["demote", "alpha"])
     assert main(["log"]) == 0
     assert "alpha" in capsys.readouterr().out
+
+
+def test_gap_and_gaps_flow(env, capsys):
+    main(["gap", "convert", "heic", "images", "to", "png"])
+    main(["gap", "convert", "heic", "photo", "to", "png"])
+    capsys.readouterr()
+    assert main(["gaps"]) == 0
+    out = capsys.readouterr().out
+    assert "heic" in out
+    assert "author" in out
+
+
+def test_author_creates_probationary_skill(env, capsys):
+    rc = main(["author", "heic-convert", "--desc", "convert heic to png", "--yes"])
+    assert rc == 0
+    assert (env / "heic-convert" / "SKILL.md").exists()
+    out = capsys.readouterr().out
+    assert "probationary" in out.lower()
+    assert "skill-creator" in out
+    # shows up as probation in status
+    capsys.readouterr()
+    main(["status"])
+    assert "prob" in capsys.readouterr().out
+
+
+def test_author_refuses_duplicate(env, capsys):
+    make_skill(env, "exists")
+    rc = main(["author", "exists", "--yes"])
+    assert rc == 1
+    assert "already exists" in capsys.readouterr().out
+
+
+def test_graduate_via_cli(env, capsys):
+    main(["author", "tryme", "--yes"])
+    capsys.readouterr()
+    assert main(["graduate", "tryme"]) == 0
+    assert "graduated" in capsys.readouterr().out
+    assert main(["graduate", "tryme"]) == 0  # idempotent
+    assert "not on probation" in capsys.readouterr().out
+
+
+def test_feedback_capability_records_gap(env, capsys, monkeypatch, tmp_path):
+    monkeypatch.setenv("QM_STYLE_FILE", str(tmp_path / "style.md"))
+    rc = main(["feedback", "I", "needed", "to", "lint", "terraform", "but", "no", "skill", "matched"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "capability" in out
+
+
+def test_feedback_demote_suggestion_then_apply(env, capsys):
+    make_skill(env, "docx-writer", description="writes docx files")
+    # suggestion only
+    assert main(["feedback", "stop", "suggesting", "docx-writer"]) == 0
+    assert Registry.load(skills_dir=env).get("docx-writer").state == ACTIVE
+    # with --apply it acts
+    assert main(["feedback", "stop", "suggesting", "docx-writer", "--apply"]) == 0
+    assert Registry.load(skills_dir=env).get("docx-writer").state == DEMOTED
+
+
+def test_revert_via_cli(env, capsys):
+    make_skill(env, "alpha")
+    main(["demote", "alpha"])
+    assert Registry.load(skills_dir=env).get("alpha").state == DEMOTED
+    assert main(["revert", "--yes"]) == 0
+    assert Registry.load(skills_dir=env).get("alpha").state == ACTIVE
+
+
+def test_revert_dry_run(env, capsys):
+    make_skill(env, "alpha")
+    main(["demote", "alpha"])
+    capsys.readouterr()
+    assert main(["revert", "--dry-run"]) == 0
+    assert "dry run" in capsys.readouterr().out
+    assert Registry.load(skills_dir=env).get("alpha").state == DEMOTED
+
+
+def test_revert_nothing_to_do(env, capsys):
+    make_skill(env, "alpha")
+    assert main(["revert", "--yes"]) == 0
+    assert "Nothing to revert" in capsys.readouterr().out

@@ -54,6 +54,11 @@ def set_state(skill: Skill, target: str, *, reason: str = "", actor: str = "qm")
 
     skill.path.write_text(fm.render(), encoding="utf-8")
     skill.state = target
+    # A probationary skill that leaves active is no longer on trial — it either
+    # failed probation (demoted/hidden) and should read as a plain skill.
+    if target != ACTIVE and skill.probation:
+        store.clear_probation(skill.name)
+        skill.probation_since = None
     store.record_transition(
         skill.name, previous, target, path=skill.path, actor=actor, reason=reason
     )

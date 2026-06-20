@@ -77,22 +77,25 @@ def render_status(registry: Registry, *, now: Optional[float] = None) -> str:
     rows.append(header)
     rows.append("  " + "-" * (len(header) - 2))
     for s in skills:
-        glyph = _STATE_GLYPH.get(s.state, "?")
+        glyph = "◉" if s.probation else _STATE_GLYPH.get(s.state, "?")
+        label = "prob" if s.probation else s.state
         tok = _human_tokens(s.index_tokens) if s.indexed else "-"
         rows.append(
             f"  {s.name[:name_w].ljust(name_w)}  "
-            f"{glyph} {s.state:<6} "
+            f"{glyph} {label:<6} "
             f"{_fmt_age(s.last_used, now):<10} "
             f"{tok:>7}"
         )
 
     summary = token_summary(registry)
+    probationary = [s for s in skills if s.probation]
     rows.append("")
     rows.append(
         f"  {summary['total']} skills  ·  "
         f"{summary['active']} active  ·  "
         f"{summary['demoted']} demoted  ·  "
         f"{summary['hidden']} hidden"
+        + (f"  ·  {len(probationary)} on probation" if probationary else "")
     )
     rows.append(
         f"  context: ~{_human_tokens(summary['context_tokens'])} tokens"
