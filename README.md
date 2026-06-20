@@ -29,9 +29,22 @@ People avoid cleanup tools because of one fear: **"what if it deletes the wrong 
 
 ## What it does
 
+Measured on **851 real open-source skills** (Anthropic + community hubs — see
+[`benchmark/`](./benchmark/)):
+
 ```
-200 skills installed  →  12 loaded for this project  →  ~8k tokens saved  →  0 deleted
+851 skills installed  →  30 loaded for this project  →  ~57.5k tokens saved (96%)  →  0 deleted
 ```
+
+| Claim | Evidence on the 851-skill corpus |
+|---|---|
+| Cuts the model's selection set | auto-select set **851 → 30** (28× smaller, at the ~30 sweet spot) |
+| Saves context tokens | **~59.7k → ~2.2k** indexed tokens (~57.5k saved, 96%) |
+| Never deletes | **851 → 851** files on disk, **0** deleted |
+| Fully reversible | demote→restore **byte-identical on 200/200** sampled skills |
+| Usage-driven curation | flags **809** stale skills to demote, then **737** to hide — fresh skills left active |
+
+Full report: [`BENCHMARK.md`](./BENCHMARK.md) (reproducible with `benchmark/run_benchmark.py`).
 
 Quartermaster manages the **lifecycle** of your skills instead of their content. It moves skills along a tiered ladder based on what you actually use — and keeps a human veto on anything irreversible.
 
