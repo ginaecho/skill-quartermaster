@@ -107,9 +107,52 @@ def menu_text(skills):
     return "\n".join(f"{s.name}: {s.description}" for s in skills)
 
 
-# ---- model backends -----------------------------------------------------
+# ---- model backends (provider-agnostic) ---------------------------------
+# The "pick the right skill" task is a plain completion, so ANY provider works.
+# Backends implement `pick(menu_skills, query, cached_key)`. Most just need a
+# `complete(system, user) -> str`; the base class assembles the prompt and maps
+# the free-text reply onto a menu name. The Anthropic backend overrides the
+# prompt assembly to prompt-cache the large, stable FULL menu.
 
-class OfflineStub:
+def extract_pick(text: str, menu_names):
+    """Map a model's free-text reply onto one of the menu skill names."""
+    if not text:
+        return "NONE"
+    t = text.strip()
+    low = t.lower()
+    by_lower = {n.lower(): n for n in menu_names}
+    # 1) exact (case-insensitive) line/string match
+    if low in by_lower:
+        return by_lower[low]
+    first = low.splitlines()[0].strip().strip("`\"' .")
+    if first in by_lower:
+        return by_lower[first]
+    # 2) longest menu name that appears verbatim in the reply
+    hits = sorted((n for n in menu_names if n.lower() in low), key=len, reverse=True)
+    if hits:
+        return hits[0]
+    return "NONE"
+
+
+class Backend:
+    label = "backend"
+
+    def complete(self, system: str, user: str) -> str:  # pragma: no cover - interface
+        raise NotImplementedError
+
+    def _raw(self, menu_skills, query, cached_key):
+        user = (
+            "AVAILABLE SKILLS:\n" + menu_text(menu_skills)
+            + f"\n\nTASK: {query}\n\nReply with ONLY the exact skill name, nothing else."
+        )
+        return self.complete(SYSTEM_INSTRUCTIONS, user)
+
+    def pick(self, menu_skills, query, cached_key=None):
+        text = self._raw(menu_skills, query, cached_key)
+        return extract_pick(text, [s.name for s in menu_skills])
+
+
+class OfflineStub(Backend):
     """Keyword-selector stand-in for the model (NOT real agent evidence)."""
 
     label = "OFFLINE keyword-selector simulation (no model in the loop)"
@@ -119,53 +162,122 @@ class OfflineStub:
         self._score = score_skills
 
     def pick(self, menu_skills, query, cached_key=None):
-        # Rank the menu by keyword overlap; return the top name.
         from qm.registry import Registry
         ranked = self._score(Registry(list(menu_skills)), query)
         return ranked[0].skill.name if ranked else "NONE"
 
 
-class ClaudeBackend:
-    label = f"LIVE model: {MODEL}"
+class AnthropicBackend(Backend):
+    """Official Anthropic SDK. Prompt-caches the stable FULL menu."""
 
-    def __init__(self):
+    def __init__(self, model, api_key_env):
         import anthropic
-        self.anthropic = anthropic
-        self.client = anthropic.Anthropic()
-        self._full_menu_cached = None
+        self.client = anthropic.Anthropic(api_key=os.environ.get(api_key_env))
+        self.model = model
+        self.label = f"LIVE Anthropic: {model}"
 
-    def pick(self, menu_skills, query, cached_key=None):
-        menu = menu_text(menu_skills)
-        # Cache the large, stable FULL menu across tasks; LOADOUT menus vary.
-        system = [
-            {"type": "text", "text": SYSTEM_INSTRUCTIONS},
-            {"type": "text", "text": "AVAILABLE SKILLS:\n" + menu,
-             **({"cache_control": {"type": "ephemeral"}} if cached_key == "full" else {})},
-        ]
+    def _raw(self, menu_skills, query, cached_key):
+        menu_block = {"type": "text", "text": "AVAILABLE SKILLS:\n" + menu_text(menu_skills)}
+        if cached_key == "full":  # identical across tasks -> cache it
+            menu_block["cache_control"] = {"type": "ephemeral"}
         resp = self.client.messages.create(
-            model=MODEL,
+            model=self.model,
             max_tokens=200,
-            system=system,
+            system=[{"type": "text", "text": SYSTEM_INSTRUCTIONS}, menu_block],
             output_config={"format": {"type": "json_schema", "schema": PICK_SCHEMA}},
             messages=[{"role": "user", "content": f"TASK: {query}\n\nPick the single best skill."}],
         )
         text = next((b.text for b in resp.content if b.type == "text"), "{}")
         try:
-            return json.loads(text).get("skill", "NONE")
+            return json.loads(text).get("skill", text)
         except json.JSONDecodeError:
-            return "NONE"
+            return text
 
 
-def get_backend(force_offline):
-    if force_offline:
-        return OfflineStub()
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("[no ANTHROPIC_API_KEY — running offline simulation]")
-        return OfflineStub()
+class OpenAICompatBackend(Backend):
+    """Official `openai` SDK against ANY OpenAI-compatible endpoint.
+
+    `--base-url` targets OpenAI, Azure, OpenRouter, Together, Groq, Fireworks,
+    or a local server (Ollama `http://localhost:11434/v1`, vLLM, LM Studio).
+    """
+
+    def __init__(self, model, api_key_env, base_url):
+        from openai import OpenAI
+        self.client = OpenAI(
+            api_key=os.environ.get(api_key_env, "not-needed"),
+            base_url=base_url or None,
+        )
+        self.model = model
+        where = base_url or "api.openai.com"
+        self.label = f"LIVE OpenAI-compatible: {model} @ {where}"
+
+    def complete(self, system, user):
+        r = self.client.chat.completions.create(
+            model=self.model,
+            max_tokens=50,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        )
+        return r.choices[0].message.content or ""
+
+
+class CommandBackend(Backend):
+    """Drive a real agent CLI (Claude Code `claude -p`, GitHub Copilot CLI, ...).
+
+    The full prompt is sent on the CLI's stdin (or written to a temp file
+    substituted for `{prompt_file}` in the command). Whatever the CLI prints is
+    parsed for the chosen skill name. Example commands:
+        --command "claude -p"
+        --command "copilot -p"
+        --command "sh my-agent-wrapper.sh {prompt_file}"
+    """
+
+    def __init__(self, command):
+        self.command = command
+        self.label = f"LIVE agent CLI: {command!r}"
+
+    def complete(self, system, user):
+        import shlex
+        import subprocess
+        import tempfile
+
+        prompt = system + "\n\n" + user
+        if "{prompt_file}" in self.command:
+            with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as fh:
+                fh.write(prompt)
+                path = fh.name
+            cmd = self.command.replace("{prompt_file}", shlex.quote(path))
+            out = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=180)
+        else:
+            out = subprocess.run(
+                shlex.split(self.command), input=prompt,
+                capture_output=True, text=True, timeout=180,
+            )
+        return (out.stdout or "") + "\n" + (out.stderr or "")
+
+
+def get_backend(args):
+    provider = args.provider
+    if provider == "auto":
+        provider = "anthropic" if os.environ.get(args.api_key_env or "ANTHROPIC_API_KEY") else "offline"
     try:
-        return ClaudeBackend()
-    except Exception as e:  # SDK missing or client init failed
-        print(f"[anthropic SDK unavailable ({e}) — running offline simulation]")
+        if provider == "offline":
+            return OfflineStub()
+        if provider == "anthropic":
+            return AnthropicBackend(args.model or MODEL, args.api_key_env or "ANTHROPIC_API_KEY")
+        if provider == "openai":
+            if not args.model:
+                raise ValueError("--model is required for --provider openai (e.g. gpt-4o, or a local model id)")
+            return OpenAICompatBackend(args.model, args.api_key_env or "OPENAI_API_KEY", args.base_url)
+        if provider == "command":
+            if not args.command:
+                raise ValueError("--command is required for --provider command (e.g. \"claude -p\")")
+            return CommandBackend(args.command)
+        raise ValueError(f"unknown provider {provider!r}")
+    except Exception as e:
+        print(f"[provider {provider!r} unavailable ({e}) — running offline simulation]")
         return OfflineStub()
 
 
@@ -177,9 +289,23 @@ def main() -> int:
     ap.add_argument("--cap", type=int, default=30)
     ap.add_argument("--full-size", type=int, default=0, help="0 = entire corpus")
     ap.add_argument("--seed", type=int, default=7)
-    ap.add_argument("--offline", action="store_true")
+    # provider selection (works with any model/provider, not just Anthropic)
+    ap.add_argument("--provider", default="auto",
+                    choices=["auto", "anthropic", "openai", "command", "offline"],
+                    help="auto = Anthropic if its key is set, else offline")
+    ap.add_argument("--model", default="", help="model id (required for openai; defaults to "
+                    f"{MODEL} for anthropic)")
+    ap.add_argument("--base-url", default="", help="OpenAI-compatible endpoint "
+                    "(OpenAI/Azure/OpenRouter/Groq/Ollama/vLLM/LM Studio...)")
+    ap.add_argument("--api-key-env", default="", help="env var holding the API key "
+                    "(default ANTHROPIC_API_KEY / OPENAI_API_KEY)")
+    ap.add_argument("--command", default="", help="agent CLI to drive, e.g. \"claude -p\" "
+                    "or \"copilot -p\" (full prompt sent on stdin, or {prompt_file})")
+    ap.add_argument("--offline", action="store_true", help="force the offline simulation")
     ap.add_argument("--out", default="benchmark/ab_eval/AB_RESULTS.md")
     args = ap.parse_args()
+    if args.offline:
+        args.provider = "offline"
 
     os.environ.setdefault("QM_HOME", "/tmp/qm_ab_home")
     from qm.compile import compile_loadout, score_skills
@@ -192,7 +318,7 @@ def main() -> int:
     by_name = {s.name: s for s in reg}
     full_pool = list(reg) if args.full_size == 0 else list(reg)[: args.full_size]
 
-    backend = get_backend(args.offline)
+    backend = get_backend(args)
     tasks = build_tasks(reg, catmap, args.n, args.seed)
 
     rng = random.Random(args.seed)

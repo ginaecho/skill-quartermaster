@@ -34,19 +34,55 @@ hold is **B ≥ A**: the loadout does not reduce the agent's ability to find the
 right skill, while costing a fraction of the context (see `../../BENCHMARK.md`,
 ~96% fewer tokens).
 
-## Run it
+## Any model, any provider
 
-**Live (real evidence) — needs the Anthropic SDK and an API key:**
+Picking the right skill is a plain completion, so the backend is pluggable —
+you are **not limited to Anthropic**. Choose a provider with `--provider`:
+
+| `--provider` | Backend | Example |
+|---|---|---|
+| `anthropic` | official `anthropic` SDK (`claude-opus-4-8`), prompt-caches the FULL menu | `--provider anthropic` |
+| `openai` | official `openai` SDK against **any OpenAI-compatible endpoint** | see below |
+| `command` | shells out to a **real agent CLI** (Claude Code, Copilot CLI, …) | see below |
+| `offline` | keyword-selector simulation (pipeline check only) | `--offline` |
 
 ```bash
-pip install anthropic
+# Anthropic (default when ANTHROPIC_API_KEY is set)
 export ANTHROPIC_API_KEY=sk-ant-...
 python3 benchmark/ab_eval/run_ab_eval.py /tmp/skillhub /tmp/c8 --n 60
+
+# OpenAI
+export OPENAI_API_KEY=sk-...
+python3 benchmark/ab_eval/run_ab_eval.py /tmp/skillhub /tmp/c8 --provider openai --model gpt-4o
+
+# Any OpenAI-compatible provider via --base-url:
+#   OpenRouter / Together / Groq / Fireworks / Azure …
+python3 benchmark/ab_eval/run_ab_eval.py /tmp/skillhub /tmp/c8 --provider openai \
+    --model anthropic/claude-opus-4-8 --base-url https://openrouter.ai/api/v1 --api-key-env OPENROUTER_API_KEY
+
+#   …or a LOCAL model (no key needed): Ollama / vLLM / LM Studio
+python3 benchmark/ab_eval/run_ab_eval.py /tmp/skillhub /tmp/c8 --provider openai \
+    --model llama3.1 --base-url http://localhost:11434/v1
+
+# Drive a real agent CLI (the "subscription agent" path):
+python3 benchmark/ab_eval/run_ab_eval.py /tmp/skillhub /tmp/c8 --provider command --command "claude -p"
+python3 benchmark/ab_eval/run_ab_eval.py /tmp/skillhub /tmp/c8 --provider command --command "copilot -p"
 ```
 
-Uses `claude-opus-4-8`, structured outputs (`output_config.format`), and prompt
-caching on the large, stable FULL menu so it's cheap to repeat. Writes
-`benchmark/ab_eval/AB_RESULTS.md`.
+The Anthropic path uses structured outputs (`output_config.format`) and prompt
+caching on the large, stable FULL menu so repeat runs are cheap. Other providers
+get a plain "reply with the exact skill name" prompt and the reply is mapped onto
+a menu name. All providers and SDKs are lazy-imported — you only need the one you
+use. Writes `benchmark/ab_eval/AB_RESULTS.md`.
+
+> **`command` vs the real harness.** The `command` backend asks an agent CLI to
+> *name* the best skill — it measures that CLI's model under our A/B, which is
+> exactly the cross-provider comparison most people want. It does **not** observe
+> the harness's *native* skill auto-selection (progressive disclosure). For that
+> deepest test, install Quartermaster's loadout, run real tasks through the
+> agent, and read which skill actually fired from the **PreToolUse telemetry
+> hook** (`hooks/usage_hook.py`) — fully faithful, but harness-specific and not a
+> one-shot script.
 
 **Cost.** The FULL menu (~851 skills ≈ 60k tokens) is identical across tasks, so
 it's cached after the first call (~0.1× reads thereafter); loadout menus are

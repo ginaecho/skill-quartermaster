@@ -75,6 +75,12 @@ python3 benchmark/ab_eval/run_ab_eval.py /tmp/skillhub /tmp/c8 --n 60
 # writes benchmark/ab_eval/AB_RESULTS.md
 ```
 
+Provider-agnostic — pick any model/provider, not just Anthropic:
+`--provider openai --model gpt-4o`, any OpenAI-compatible endpoint via
+`--base-url` (OpenRouter/Groq/Azure, or a **local** Ollama/vLLM/LM Studio), or
+drive a real agent CLI with `--provider command --command "claude -p"` /
+`"copilot -p"`. See [`benchmark/ab_eval/`](./benchmark/ab_eval/).
+
 <!-- AB-RESULTS:START — paste the headline from benchmark/ab_eval/AB_RESULTS.md after the live run -->
 > _Live results pending — run the command above with your API key, then paste
 > the accuracy table here (full vs loadout, recall, Δ)._
