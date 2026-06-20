@@ -96,10 +96,13 @@ def classify(text: str, registry: Optional[Registry] = None) -> Signal:
     low = text.lower()
     toks = set(_tokens(text))
 
-    style = _phrase_hits(low, _STYLE_PHRASES) + len(toks & _STYLE_WORDS)
-    capability = _phrase_hits(low, _CAPABILITY_PHRASES) + len(toks & _CAPABILITY_WORDS)
-    demote = _phrase_hits(low, _DEMOTE_PHRASES)
-    promote = _phrase_hits(low, _PROMOTE_PHRASES)
+    # Explicit phrases ("needed to", "no skill", "stop suggesting") are stronger
+    # signals of intent than an incidental topic word ("lint", "format"), which
+    # can belong to either category — so weight phrase hits more heavily.
+    style = 2 * _phrase_hits(low, _STYLE_PHRASES) + len(toks & _STYLE_WORDS)
+    capability = 2 * _phrase_hits(low, _CAPABILITY_PHRASES) + len(toks & _CAPABILITY_WORDS)
+    demote = 2 * _phrase_hits(low, _DEMOTE_PHRASES)
+    promote = 2 * _phrase_hits(low, _PROMOTE_PHRASES)
 
     named = find_named_skill(text, registry) if registry is not None else None
     scores = {"style": style, "capability": capability, "demote": demote, "promote": promote}

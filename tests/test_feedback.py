@@ -49,6 +49,13 @@ def test_classify_ambiguous(env):
     assert sig.kind == "ambiguous"
 
 
+def test_capability_phrase_outweighs_incidental_style_word(env):
+    # "lint" is a style-ish word, but "needed to ... no skill" is a clear
+    # capability request — the explicit phrases must win the tie.
+    sig = feedback.classify("needed to lint terraform and no skill handled it", _reg(env))
+    assert sig.kind == "capability"
+
+
 def test_find_named_skill_by_word(env):
     make_skill(env, "docx-writer", description="writes docx files")
     assert feedback.find_named_skill("the docx thing keeps firing", _reg(env)) == "docx-writer"
