@@ -1,0 +1,275 @@
+"""``qm`` command-line interface — the thin lifecycle tool.
+
+Verbs (matching the README):
+
+    qm status              show every skill, its state, last-used, token cost
+    qm compile <intent>    propose an active loadout for this project
+    qm review              show proposed demotions/promotions, approve them
+    qm restore <skill>     bring a skill back to active
+    qm demote <skill>      manual-only (out of auto-selection)
+    qm hide <skill>        out of context entirely
+    qm activate <skill>    alias of restore
+    qm delete <skill>      human-gated removal from disk (requires --yes)
+    qm log                 print the audit trail
+
+Everything but ``delete`` is non-destructive and reversible. ``delete`` refuses
+to run without an explicit confirmation and only on a long-hidden skill unless
+forced.
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+import time
+from typing import List, Optional
+
+from . import compile as compile_mod
+from . import policy, report, store, transitions
+from .registry import ACTIVE, DEMOTED, HIDDEN, Registry
+
+
+def _load_registry(args) -> Registry:
+    return Registry.load(
+        skills_dir=getattr(args, "skills_dir", None),
+        last_used=store.last_used_map(),
+    )
+
+
+def _print(msg: str = "") -> None:
+    print(msg)
+
+
+# --- commands ------------------------------------------------------------
+
+def cmd_status(args) -> int:
+    reg = _load_registry(args)
+    _print(report.render_status(reg))
+    return 0
+
+
+def cmd_compile(args) -> int:
+    reg = _load_registry(args)
+    intent = " ".join(args.intent).strip()
+    if not intent:
+        _print("Provide a project intent, e.g.  qm compile \"a rust web API with sqlx\"")
+        return 2
+    plan = compile_mod.compile_loadout(reg, intent, cap=args.cap)
+
+    _print(f"Intent: {intent}")
+    _print(f"Loadout cap: {plan.cap}\n")
+    _print(f"Keep active ({len(plan.keep)}):")
+    for s in plan.keep:
+        why = ", ".join(s.matched) if s.matched else "(kept to fill loadout)"
+        _print(f"  ● {s.skill.name}  [score {s.score}: {why}]")
+    if plan.drop:
+        _print(f"\nDemote ({len(plan.drop)}):")
+        for s in plan.drop:
+            _print(f"  ◐ {s.skill.name}")
+
+    if args.dry_run:
+        _print("\n(dry run — nothing changed)")
+        return 0
+    if not args.yes and not _confirm("\nApply this loadout?"):
+        _print("Aborted. Nothing changed.")
+        return 1
+
+    changed = 0
+    for s in plan.keep:
+        sk = reg.get(s.skill.name)
+        if sk and sk.state != ACTIVE:
+            transitions.activate(sk, reason="compile: matched intent")
+            changed += 1
+    for s in plan.drop:
+        sk = reg.get(s.skill.name)
+        if sk and sk.state == ACTIVE:
+            transitions.demote(sk, reason="compile: off-intent")
+            changed += 1
+    _print(f"\nApplied. {changed} transition(s). Run `qm status` to see the loadout.")
+    return 0
+
+
+def cmd_review(args) -> int:
+    reg = _load_registry(args)
+    proposals = policy.propose(
+        reg,
+        demote_after_days=args.demote_after,
+        hide_after_days=args.hide_after,
+    )
+    if not proposals:
+        _print("No proposals. Your loadout looks well-tuned. ✓")
+        return 0
+
+    _print(f"{len(proposals)} proposal(s):\n")
+    for i, p in enumerate(proposals, 1):
+        _print(f"  {i}. {p.action:<7} {p.skill}  ({p.from_state} → {p.to_state})  — {p.reason}")
+
+    if args.dry_run:
+        _print("\n(dry run — nothing changed)")
+        return 0
+    if not args.yes and not _confirm("\nApprove all of the above?"):
+        _print("Aborted. Nothing changed.")
+        return 1
+
+    applied = 0
+    for p in proposals:
+        sk = reg.get(p.skill)
+        if not sk:
+            continue
+        transitions.set_state(sk, p.to_state, reason=f"review: {p.reason}")
+        applied += 1
+    _print(f"\nApplied {applied} transition(s). All reversible via `qm restore <skill>`.")
+    return 0
+
+
+def _transition_cmd(args, target: str, verb: str) -> int:
+    reg = _load_registry(args)
+    sk = reg.get(args.skill)
+    if not sk:
+        _print(f"No skill named {args.skill!r}. Run `qm status` to list skills.")
+        return 2
+    prev = transitions.set_state(sk, target, reason=f"manual {verb}")
+    if prev == target:
+        _print(f"{sk.name} is already {target}. Nothing changed.")
+    else:
+        _print(f"{sk.name}: {prev} → {target}.")
+    return 0
+
+
+def cmd_restore(args) -> int:
+    return _transition_cmd(args, ACTIVE, "restore")
+
+
+def cmd_activate(args) -> int:
+    return _transition_cmd(args, ACTIVE, "activate")
+
+
+def cmd_demote(args) -> int:
+    return _transition_cmd(args, DEMOTED, "demote")
+
+
+def cmd_hide(args) -> int:
+    return _transition_cmd(args, HIDDEN, "hide")
+
+
+def cmd_delete(args) -> int:
+    reg = _load_registry(args)
+    sk = reg.get(args.skill)
+    if not sk:
+        _print(f"No skill named {args.skill!r}.")
+        return 2
+
+    if sk.state != HIDDEN and not args.force:
+        _print(
+            f"Refusing to delete {sk.name}: it is {sk.state}, not hidden.\n"
+            f"Deletion is only proposed for long-hidden skills. Hide it first\n"
+            f"(`qm hide {sk.name}`), or pass --force if you are certain."
+        )
+        return 1
+
+    if not args.yes:
+        _print(
+            f"This will permanently remove {sk.dir} from disk.\n"
+            f"This is the ONLY destructive action Quartermaster performs.\n"
+            f"Re-run with --yes to confirm."
+        )
+        return 1
+
+    import shutil
+
+    store.record_transition(
+        sk.name, sk.state, "deleted", path=sk.path, actor="qm", reason="human-approved delete"
+    )
+    shutil.rmtree(sk.dir)
+    _print(f"Deleted {sk.name} ({sk.dir}). Logged to the audit trail.")
+    return 0
+
+
+def cmd_log(args) -> int:
+    entries = store.read_audit()
+    if not entries:
+        _print("Audit log is empty.")
+        return 0
+    for e in entries[-args.limit:] if args.limit else entries:
+        ts = time.strftime("%Y-%m-%d %H:%M", time.localtime(e["ts"]))
+        reason = f"  — {e['reason']}" if e.get("reason") else ""
+        _print(f"  {ts}  {e['skill']}: {e['from']} → {e['to']}{reason}")
+    return 0
+
+
+# --- helpers -------------------------------------------------------------
+
+def _confirm(prompt: str) -> bool:
+    if not sys.stdin.isatty():
+        return False
+    try:
+        ans = input(f"{prompt} [y/N] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return False
+    return ans in ("y", "yes")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="qm",
+        description="Quartermaster — non-destructive skill lifecycle manager.",
+    )
+    p.add_argument(
+        "--skills-dir",
+        dest="skills_dir",
+        default=None,
+        help="Directory of skills to manage (overrides QM_SKILLS_DIR).",
+    )
+    sub = p.add_subparsers(dest="command")
+
+    sp = sub.add_parser("status", help="show all skills, states, and token cost")
+    sp.set_defaults(func=cmd_status)
+
+    sp = sub.add_parser("compile", help="build an active loadout from a project intent")
+    sp.add_argument("intent", nargs="*", help="plain-language description of the project")
+    sp.add_argument("--cap", type=int, default=compile_mod.DEFAULT_CAP, help="max active skills")
+    sp.add_argument("--yes", action="store_true", help="apply without prompting")
+    sp.add_argument("--dry-run", action="store_true", help="show plan only")
+    sp.set_defaults(func=cmd_compile)
+
+    sp = sub.add_parser("review", help="show & approve proposed transitions")
+    sp.add_argument("--demote-after", type=int, default=policy.DEMOTE_AFTER_DAYS)
+    sp.add_argument("--hide-after", type=int, default=policy.HIDE_AFTER_DAYS)
+    sp.add_argument("--yes", action="store_true", help="approve all without prompting")
+    sp.add_argument("--dry-run", action="store_true", help="show proposals only")
+    sp.set_defaults(func=cmd_review)
+
+    for name, fn, helptext in [
+        ("restore", cmd_restore, "bring a skill back to active"),
+        ("activate", cmd_activate, "alias of restore"),
+        ("demote", cmd_demote, "make manual-only (out of auto-selection)"),
+        ("hide", cmd_hide, "remove from context entirely"),
+    ]:
+        sp = sub.add_parser(name, help=helptext)
+        sp.add_argument("skill", help="skill name")
+        sp.set_defaults(func=fn)
+
+    sp = sub.add_parser("delete", help="human-gated removal from disk")
+    sp.add_argument("skill", help="skill name")
+    sp.add_argument("--yes", action="store_true", help="confirm the deletion")
+    sp.add_argument("--force", action="store_true", help="allow deleting a non-hidden skill")
+    sp.set_defaults(func=cmd_delete)
+
+    sp = sub.add_parser("log", help="print the audit trail")
+    sp.add_argument("--limit", type=int, default=0, help="show only the last N entries")
+    sp.set_defaults(func=cmd_log)
+
+    return p
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if not getattr(args, "command", None):
+        parser.print_help()
+        return 0
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

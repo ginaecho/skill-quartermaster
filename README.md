@@ -54,16 +54,33 @@ Every transition is **logged and reversible**. Demote and hide happen automatica
 /plugin install quartermaster@skill-quartermaster
 ```
 
-Then, in your project:
+Once installed you get the `quartermaster` skill plus slash commands
+(`/qm-status`, `/qm-compile`, `/qm-review`, `/qm-restore`) and the `qm` CLI:
 
 ```bash
-qm status          # show every skill, its state, and last-used date
-qm compile         # build an active loadout for this project
-qm review          # see proposed demotions/promotions and approve them
-qm restore <skill> # bring anything back from demoted/hidden
+qm status              # show every skill, its state, last-used, token cost
+qm compile "<intent>"  # build an active loadout for this project
+qm review              # see proposed demotions/promotions and approve them
+qm restore <skill>     # bring anything back from demoted/hidden
+qm demote <skill>      # take a skill out of auto-selection (manual-only)
+qm hide <skill>        # remove a skill from context entirely
+qm log                 # print the audit trail of every change
+qm delete <skill> --yes  # human-gated removal (the only destructive action)
 ```
 
-> Quartermaster only ever *toggles states* and *proposes* changes. It will not remove a skill from disk unless you explicitly confirm.
+> Quartermaster only ever *toggles states* and *proposes* changes. It will not remove a skill from disk unless you explicitly confirm with `--yes`.
+
+### Try it without installing
+
+The CLI is pure-Python (stdlib only). Point it at any folder of skills:
+
+```bash
+export QM_SKILLS_DIR=~/.claude/skills      # or your project's .claude/skills
+python3 bin/qm status
+```
+
+Local state (usage telemetry + audit log) lives under `~/.quartermaster/`
+(override with `QM_HOME`). Nothing ever leaves your machine.
 
 ## How it works
 
@@ -101,16 +118,39 @@ You're trusting a tool to touch your skills. Quartermaster's entire design is bu
 
 ## Roadmap
 
-| Phase | Scope |
-|---|---|
-| **v0** | Lifecycle core: registry, state toggles, `qm status` + token-saved report |
-| **v0.2** | Usage telemetry + demote-if-unused proposals + batched approvals |
-| **v0.3** | Intent compiler (loadout from project intent + style) |
-| **v0.4** | Authoring arm (gap detection → `skill-creator` handoff) |
-| **v0.5** | Natural-language feedback → lifecycle/authoring signals |
-| **v1.0** | Audit log UI, one-click revert, dashboard, marketplace listing |
+| Phase | Scope | Status |
+|---|---|---|
+| **v0** | Lifecycle core: registry, state toggles, `qm status` + token-saved report | ✅ shipped |
+| **v0.2** | Usage telemetry (PreToolUse hook) + demote-if-unused proposals + batched approvals (`qm review`) | ✅ shipped |
+| **v0.3** | Intent compiler (`qm compile` — keyword loadout from project intent) | ◐ basic |
+| **v0.4** | Authoring arm (gap detection → `skill-creator` handoff) | ☐ planned |
+| **v0.5** | Natural-language feedback → lifecycle/authoring signals | ☐ planned |
+| **v1.0** | Semantic-embedding compiler, audit log UI, one-click revert, dashboard | ☐ planned |
 
 We ship the lifecycle half first on purpose — the compiler and authoring arm only earn their place once the simple half has users.
+
+## Project layout
+
+```
+.claude-plugin/
+  plugin.json          # plugin manifest (skill + commands + hooks)
+  marketplace.json     # one-command install manifest
+skills/quartermaster/  # the meta-skill that teaches Claude to drive qm
+commands/              # /qm-status, /qm-compile, /qm-review, /qm-restore
+hooks/                 # PreToolUse usage telemetry (local-only)
+qm/                    # the pure-Python CLI
+  registry.py          #   the shelf: scan skills, derive state from frontmatter
+  transitions.py       #   non-destructive state changes + audit logging
+  policy.py            #   the policy engine — proposes, never executes
+  compile.py           #   intent compiler (keyword loadout)
+  store.py             #   local audit log + usage telemetry
+  report.py            #   status table + token-saved report
+  cli.py               #   argparse dispatch
+bin/qm                 # zero-install entry point
+tests/                 # pytest suite
+```
+
+Run the tests with `python3 -m pytest`.
 
 ## Contributing
 
