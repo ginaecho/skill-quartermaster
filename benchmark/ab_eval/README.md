@@ -100,6 +100,24 @@ methodology**, not agent performance — offline numbers are labeled as such in 
 output and should never be cited as evidence. (Build the corpus with
 `../build_corpus.py` — see `../README.md`.)
 
+## Where to run it (local vs. cloud)
+
+You don't have to run it on your laptop:
+
+- **Your machine.** `pip install -r requirements.txt`, export the key, run the
+  command above.
+- **GitHub's cloud (Actions).** A manual-dispatch workflow is included at
+  `.github/workflows/ab-eval.yml`. Add `ANTHROPIC_API_KEY` (and/or
+  `OPENAI_API_KEY`) under **Settings → Secrets and variables → Actions**, then
+  run it from the **Actions** tab (choose provider / model / `n`). It builds the
+  corpus, runs the eval, prints the table to the run summary, and uploads
+  `AB_RESULTS.md` as an artifact. This is the "GitHub cloud" answer — GitHub
+  Copilot itself isn't a general compute target, but Actions is.
+- **An Anthropic-hosted Claude Code session.** A Claude Code on the web session
+  already runs in Anthropic's managed cloud — set `ANTHROPIC_API_KEY` in the
+  environment's config (and allow egress to `api.anthropic.com`) and the agent
+  can run the eval there, no laptop involved.
+
 ## What this proves / does not prove
 
 - **Proves (live run):** whether the compiled loadout preserves — or improves —
