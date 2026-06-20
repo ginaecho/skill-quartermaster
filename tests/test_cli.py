@@ -82,6 +82,16 @@ def test_compile_apply_with_yes(env):
     assert reg.get("weird").state == DEMOTED
 
 
+def test_compile_refuses_vague_intent(env, capsys):
+    make_skill(env, "rusty", description="rust cargo helper")
+    make_skill(env, "weird", description="unrelated")
+    rc = main(["compile", "the a to", "--yes"])  # only stop-words
+    assert rc == 1
+    assert "matched no skills" in capsys.readouterr().out
+    # nothing demoted
+    assert Registry.load(skills_dir=env).get("rusty").state == ACTIVE
+
+
 def test_review_dry_run(env, capsys):
     import time
     make_skill(env, "stale")
@@ -153,3 +163,26 @@ def test_feedback_demote_suggestion_then_apply(env, capsys):
     # with --apply it acts
     assert main(["feedback", "stop", "suggesting", "docx-writer", "--apply"]) == 0
     assert Registry.load(skills_dir=env).get("docx-writer").state == DEMOTED
+
+
+def test_revert_via_cli(env, capsys):
+    make_skill(env, "alpha")
+    main(["demote", "alpha"])
+    assert Registry.load(skills_dir=env).get("alpha").state == DEMOTED
+    assert main(["revert", "--yes"]) == 0
+    assert Registry.load(skills_dir=env).get("alpha").state == ACTIVE
+
+
+def test_revert_dry_run(env, capsys):
+    make_skill(env, "alpha")
+    main(["demote", "alpha"])
+    capsys.readouterr()
+    assert main(["revert", "--dry-run"]) == 0
+    assert "dry run" in capsys.readouterr().out
+    assert Registry.load(skills_dir=env).get("alpha").state == DEMOTED
+
+
+def test_revert_nothing_to_do(env, capsys):
+    make_skill(env, "alpha")
+    assert main(["revert", "--yes"]) == 0
+    assert "Nothing to revert" in capsys.readouterr().out

@@ -122,9 +122,9 @@ Under the hood these states map to existing Claude Code primitives — Quarterma
 You're trusting a tool to touch your skills. Quartermaster's entire design is built around that trust:
 
 - **Demote, don't delete** — unused skills drop out of the model's attention and out of context, but stay fully on disk and recoverable.
-- **One-command restore** — `qm restore` reverses any automatic change.
-- **Human-gated deletion** — the only path to removal runs through an explicit approval.
-- **Full audit log** — every state change is recorded and inspectable.
+- **One-command restore** — `qm restore <skill>` reverses any single change; `qm revert` walks back the last N automatic changes from the audit trail.
+- **Human-gated deletion** — the only path to removal runs through an explicit approval; `qm revert` deliberately refuses to undo a deletion or silently delete a skill.
+- **Full audit log** — every state change (including each revert) is recorded and inspectable via `qm log`.
 
 ## Roadmap
 
@@ -155,6 +155,7 @@ qm/                    # the pure-Python CLI
   compile.py           #   intent compiler (keyword loadout)
   authoring.py         #   authoring arm: gap clustering + skill scaffolding
   feedback.py          #   route plain-language complaints to the right lever
+  history.py           #   one-click revert from the audit trail
   store.py             #   local audit log + usage telemetry
   report.py            #   status table + token-saved report
   cli.py               #   argparse dispatch

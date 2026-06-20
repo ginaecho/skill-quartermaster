@@ -27,6 +27,7 @@ from typing import List, Optional
 from . import authoring
 from . import compile as compile_mod
 from . import feedback as feedback_mod
+from . import history
 from . import policy, report, store, transitions
 from .registry import ACTIVE, DEMOTED, HIDDEN, Registry
 
@@ -73,6 +74,16 @@ def cmd_compile(args) -> int:
         _print("Provide a project intent, e.g.  qm compile \"a rust web API with sqlx\"")
         return 2
     plan = compile_mod.compile_loadout(reg, intent, cap=args.cap)
+
+    # Safety: a too-vague intent (e.g. only stop-words) matches nothing and
+    # would demote the whole shelf. Refuse rather than nuke the loadout.
+    if len(reg) > 0 and not any(s.score > 0 for s in plan.keep):
+        _print(
+            f"Intent {intent!r} matched no skills, so this would demote all "
+            f"{len(reg)} of them.\nRefusing — give a more specific intent "
+            f"(mention languages, tools, or task types)."
+        )
+        return 1
 
     _print(f"Intent: {intent}")
     _print(f"Loadout cap: {plan.cap}\n")
@@ -335,6 +346,37 @@ def cmd_delete(args) -> int:
     return 0
 
 
+def cmd_revert(args) -> int:
+    reg = _load_registry(args)
+    plans = history.plan_revert(reg, limit=args.n, skill=args.skill)
+    if not plans:
+        _print("Nothing to revert — the audit trail has no reversible changes.")
+        return 0
+
+    _print("Would revert:")
+    actionable = [p for p in plans if p.target not in ("(blocked)", "(missing)")]
+    for p in plans:
+        flag = "" if p in actionable else "  [skipped]"
+        _print(f"  {p.describe}{flag}")
+
+    if not actionable:
+        _print("\nNone of these can be auto-reverted (deletions/admissions are human-gated).")
+        return 1
+    if args.dry_run:
+        _print("\n(dry run — nothing changed)")
+        return 0
+    if not args.yes and not _confirm("\nApply these reverts?"):
+        _print("Aborted. Nothing changed.")
+        return 1
+
+    done = 0
+    for p in actionable:
+        if history.apply_revert(reg, p):
+            done += 1
+    _print(f"\nReverted {done} change(s).")
+    return 0
+
+
 def cmd_log(args) -> int:
     entries = store.read_audit()
     if not entries:
@@ -431,6 +473,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--yes", action="store_true", help="confirm the deletion")
     sp.add_argument("--force", action="store_true", help="allow deleting a non-hidden skill")
     sp.set_defaults(func=cmd_delete)
+
+    sp = sub.add_parser("revert", help="undo recent automatic changes (one-click revert)")
+    sp.add_argument("-n", type=int, default=1, help="how many recent changes to revert")
+    sp.add_argument("--skill", default=None, help="revert only this skill's most recent change")
+    sp.add_argument("--yes", action="store_true", help="apply without prompting")
+    sp.add_argument("--dry-run", action="store_true", help="show what would be reverted")
+    sp.set_defaults(func=cmd_revert)
 
     sp = sub.add_parser("log", help="print the audit trail")
     sp.add_argument("--limit", type=int, default=0, help="show only the last N entries")

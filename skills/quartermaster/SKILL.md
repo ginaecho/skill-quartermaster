@@ -45,6 +45,8 @@ qm <command>
 - `qm demote <skill>` — take a skill out of auto-selection (manual-only).
 - `qm hide <skill>` — remove a skill from context entirely.
 - `qm delete <skill> --yes` — permanently remove a (hidden) skill. **Destructive.**
+- `qm revert [-n N] [--skill X]` — undo the last N automatic changes (one-click
+  revert). Skips deletions/admissions, which stay human-gated.
 - `qm log` — print the audit trail of every transition.
 
 ### Authoring arm (the capability-gap loop)
