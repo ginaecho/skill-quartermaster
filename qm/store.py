@@ -181,3 +181,36 @@ def clear_probation(skill: str) -> bool:
         _write_probation(data)
         return True
     return False
+
+
+# --- Style file (the "constitution") -------------------------------------
+# Style feedback is appended to an always-on rules file rather than a skill.
+# Default lives under the project so it can be @-included or referenced from
+# CLAUDE.md; override with QM_STYLE_FILE.
+
+_STYLE_HEADER = "## Quartermaster style notes\n"
+
+
+def style_file() -> Path:
+    env = os.environ.get("QM_STYLE_FILE")
+    if env:
+        return Path(env).expanduser()
+    return Path(".claude") / "quartermaster-style.md"
+
+
+def append_style(note: str, *, ts: Optional[float] = None) -> Path:
+    """Append a style note to the managed style file. Returns its path."""
+    path = style_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y-%m-%d", time.localtime(ts if ts is not None else time.time()))
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    prefix = "" if existing.startswith(_STYLE_HEADER) or _STYLE_HEADER in existing else _STYLE_HEADER
+    lead = "" if (not existing or existing.endswith("\n")) else "\n"
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(f"{lead}{prefix}- ({stamp}) {note.strip()}\n")
+    return path
+
+
+def read_style() -> str:
+    path = style_file()
+    return path.read_text(encoding="utf-8") if path.exists() else ""

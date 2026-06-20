@@ -72,6 +72,10 @@ qm gap "<need>"        # record a capability gap (a need with no matching skill)
 qm gaps                # cluster gaps; recommend new skills to author
 qm author <name>       # scaffold a probationary skill (hand off to skill-creator)
 qm graduate <skill>    # end probation once a new skill has proven useful
+
+# Feedback & undo
+qm feedback "<gripe>"  # route a plain-language complaint to the right lever
+qm revert              # undo the last automatic change (one-click revert)
 ```
 
 > Quartermaster only ever *toggles states* and *proposes* changes. It will not remove a skill from disk unless you explicitly confirm with `--yes`.
@@ -130,8 +134,8 @@ You're trusting a tool to touch your skills. Quartermaster's entire design is bu
 | **v0.2** | Usage telemetry (PreToolUse hook) + demote-if-unused proposals + batched approvals (`qm review`) | ✅ shipped |
 | **v0.3** | Intent compiler (`qm compile` — keyword loadout from project intent) | ◐ basic |
 | **v0.4** | Authoring arm: gap detection (`qm gap`/`qm gaps`) → `skill-creator` handoff (`qm author`) → probationary admission + graduation | ✅ shipped |
-| **v0.5** | Natural-language feedback → lifecycle/authoring signals | ☐ planned |
-| **v1.0** | Semantic-embedding compiler, audit log UI, one-click revert, dashboard | ☐ planned |
+| **v0.5** | Natural-language feedback (`qm feedback`) → style file / gap / promote / demote signals | ✅ shipped |
+| **v1.0** | One-click revert (`qm revert`), full audit trail, marketplace listing; semantic-embedding compiler + dashboard | ◐ partial |
 
 We ship the lifecycle half first on purpose — the compiler and authoring arm only earn their place once the simple half has users.
 
@@ -150,6 +154,7 @@ qm/                    # the pure-Python CLI
   policy.py            #   the policy engine — proposes, never executes
   compile.py           #   intent compiler (keyword loadout)
   authoring.py         #   authoring arm: gap clustering + skill scaffolding
+  feedback.py          #   route plain-language complaints to the right lever
   store.py             #   local audit log + usage telemetry
   report.py            #   status table + token-saved report
   cli.py               #   argparse dispatch

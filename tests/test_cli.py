@@ -135,3 +135,21 @@ def test_graduate_via_cli(env, capsys):
     assert "graduated" in capsys.readouterr().out
     assert main(["graduate", "tryme"]) == 0  # idempotent
     assert "not on probation" in capsys.readouterr().out
+
+
+def test_feedback_capability_records_gap(env, capsys, monkeypatch, tmp_path):
+    monkeypatch.setenv("QM_STYLE_FILE", str(tmp_path / "style.md"))
+    rc = main(["feedback", "I", "needed", "to", "lint", "terraform", "but", "no", "skill", "matched"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "capability" in out
+
+
+def test_feedback_demote_suggestion_then_apply(env, capsys):
+    make_skill(env, "docx-writer", description="writes docx files")
+    # suggestion only
+    assert main(["feedback", "stop", "suggesting", "docx-writer"]) == 0
+    assert Registry.load(skills_dir=env).get("docx-writer").state == ACTIVE
+    # with --apply it acts
+    assert main(["feedback", "stop", "suggesting", "docx-writer", "--apply"]) == 0
+    assert Registry.load(skills_dir=env).get("docx-writer").state == DEMOTED

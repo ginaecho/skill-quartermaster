@@ -57,6 +57,15 @@ qm <command>
   it as **active, probationary** (on trial). This writes a stub only.
 - `qm graduate <skill>` — end a skill's probation once it has proven useful.
 
+### Feedback (plain-language complaints)
+
+- `qm feedback "<what's off>"` — route a natural-language complaint to the right
+  lever. A *style* miss is appended to the always-on style file; a *capability*
+  miss is recorded as a gap (feeding the authoring arm); "stop suggesting X" /
+  "I keep using X" become demote/promote suggestions for a named skill. Only the
+  local style note and gap log are written automatically — skill moves are
+  suggested unless you pass `--apply`.
+
 ## Probation
 
 A newly authored skill is admitted **probationary**: it is `active` and usable
@@ -84,6 +93,12 @@ probationary skills with `◉ prob`.
    instructions into the generated `SKILL.md`. `qm author` only scaffolds — it
    never writes the skill's content itself. Leave the skill probationary until
    the user confirms it works, then `qm graduate <name>`.
+7. **Turn complaints into action.** When the user gripes in plain language
+   ("this isn't matching my style", "I keep needing X", "stop suggesting Y"),
+   run `qm feedback "<their words>"`. Apply the style note / gap automatically,
+   but confirm before moving a skill (or pass `--apply` once they agree).
+8. **Undo is one command.** Any automatic change can be reversed with
+   `qm revert` (last change) or `qm restore <skill>`. Offer it freely.
 
 ## Notes
 

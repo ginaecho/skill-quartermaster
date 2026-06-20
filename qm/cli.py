@@ -26,6 +26,7 @@ from typing import List, Optional
 
 from . import authoring
 from . import compile as compile_mod
+from . import feedback as feedback_mod
 from . import policy, report, store, transitions
 from .registry import ACTIVE, DEMOTED, HIDDEN, Registry
 
@@ -239,6 +240,38 @@ def cmd_graduate(args) -> int:
     return 0
 
 
+def cmd_feedback(args) -> int:
+    reg = _load_registry(args)
+    text = " ".join(args.text).strip()
+    if not text:
+        _print('Tell me what is off, e.g.  qm feedback "this isn\'t matching my code style"')
+        return 2
+    result = feedback_mod.ingest(text, reg)
+    sig = result.signal
+    _print(f"Classified as: {sig.kind}" + (f" ({sig.skill})" if sig.skill else ""))
+    _print(f"→ {result.applied}")
+
+    # Auto-apply only the safe, local levers; suggest the rest.
+    if sig.kind in ("style", "capability"):
+        if result.follow_up:
+            _print(f"\nNext: {result.follow_up}")
+        return 0
+
+    if sig.kind in ("demote", "promote") and sig.skill:
+        if args.apply:
+            sk = reg.get(sig.skill)
+            target = DEMOTED if sig.kind == "demote" else ACTIVE
+            transitions.set_state(sk, target, reason=f"feedback: {text}")
+            _print(f"Applied: {sig.skill} → {target}.")
+        else:
+            _print(f"\nSuggested: {result.follow_up}   (re-run with --apply to do it now)")
+        return 0
+
+    if result.follow_up:
+        _print(f"\n{result.follow_up}")
+    return 0
+
+
 def _transition_cmd(args, target: str, verb: str) -> int:
     reg = _load_registry(args)
     sk = reg.get(args.skill)
@@ -377,6 +410,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("graduate", help="end a skill's probation (proven useful)")
     sp.add_argument("skill", help="skill name")
     sp.set_defaults(func=cmd_graduate)
+
+    sp = sub.add_parser("feedback", help="route a plain-language complaint to the right lever")
+    sp.add_argument("text", nargs="*", help="what's off, in plain language")
+    sp.add_argument("--apply", action="store_true", help="apply a suggested promote/demote immediately")
+    sp.set_defaults(func=cmd_feedback)
 
     for name, fn, helptext in [
         ("restore", cmd_restore, "bring a skill back to active"),
