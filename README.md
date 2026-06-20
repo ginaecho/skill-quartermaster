@@ -43,8 +43,12 @@ Measured on **851 real open-source skills** (Anthropic + community hubs — see
 | Never deletes | **851 → 851** files on disk, **0** deleted |
 | Fully reversible | demote→restore **byte-identical on 200/200** sampled skills |
 | Usage-driven curation | flags **809** stale skills to demote, then **737** to hide — fresh skills left active |
+| **Keeps what the task needs** | trimmed loadout is **~10× more relevant than random**; **100% recall** of specifically-needed skills at cap=30 (vs 3.5% random) |
 
-Full report: [`BENCHMARK.md`](./BENCHMARK.md) (reproducible with `benchmark/run_benchmark.py`).
+Full reports: [`BENCHMARK.md`](./BENCHMARK.md) (lifecycle + savings) and
+[`PERFORMANCE.md`](./PERFORMANCE.md) (capability retention — proof the token
+savings don't drop the skills a task needs). Both reproducible from
+[`benchmark/`](./benchmark/).
 
 Quartermaster manages the **lifecycle** of your skills instead of their content. It moves skills along a tiered ladder based on what you actually use — and keeps a human veto on anything irreversible.
 
