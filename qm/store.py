@@ -33,6 +33,14 @@ def _usage_path() -> Path:
     return _ensure_home() / "usage.jsonl"
 
 
+def _gaps_path() -> Path:
+    return _ensure_home() / "gaps.jsonl"
+
+
+def _probation_path() -> Path:
+    return _ensure_home() / "probation.json"
+
+
 # --- Audit log -----------------------------------------------------------
 
 def record_transition(
@@ -100,3 +108,76 @@ def last_used_map() -> Dict[str, float]:
             if name not in out or ts > out[name]:
                 out[name] = ts
     return out
+
+
+# --- Capability gaps -----------------------------------------------------
+
+def record_gap(text: str, *, context: str = "", ts: Optional[float] = None) -> Dict:
+    """Record a capability gap: a need with no matching skill.
+
+    The authoring arm clusters these; a recurring gap is what triggers a
+    proposal to draft a new skill.
+    """
+    entry = {
+        "ts": ts if ts is not None else time.time(),
+        "text": text,
+        "context": context,
+    }
+    with _gaps_path().open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(entry) + "\n")
+    return entry
+
+
+def read_gaps() -> List[Dict]:
+    p = _gaps_path()
+    if not p.exists():
+        return []
+    out: List[Dict] = []
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            out.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return out
+
+
+# --- Probation overlay ---------------------------------------------------
+# Probation is Quartermaster's own concept, not a Claude Code primitive, so it
+# lives here as an overlay rather than polluting skill files with non-standard
+# frontmatter keys. A probationary skill is still `active`; this just tracks
+# that it is on trial.
+
+def read_probation() -> Dict[str, Dict]:
+    p = _probation_path()
+    if not p.exists():
+        return {}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_probation(data: Dict[str, Dict]) -> None:
+    _probation_path().write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def set_probation(skill: str, *, brief: str = "", ts: Optional[float] = None) -> None:
+    data = read_probation()
+    data[skill] = {
+        "admitted": ts if ts is not None else time.time(),
+        "brief": brief,
+    }
+    _write_probation(data)
+
+
+def clear_probation(skill: str) -> bool:
+    data = read_probation()
+    if skill in data:
+        del data[skill]
+        _write_probation(data)
+        return True
+    return False

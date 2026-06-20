@@ -96,3 +96,42 @@ def test_log_command(env, capsys):
     main(["demote", "alpha"])
     assert main(["log"]) == 0
     assert "alpha" in capsys.readouterr().out
+
+
+def test_gap_and_gaps_flow(env, capsys):
+    main(["gap", "convert", "heic", "images", "to", "png"])
+    main(["gap", "convert", "heic", "photo", "to", "png"])
+    capsys.readouterr()
+    assert main(["gaps"]) == 0
+    out = capsys.readouterr().out
+    assert "heic" in out
+    assert "author" in out
+
+
+def test_author_creates_probationary_skill(env, capsys):
+    rc = main(["author", "heic-convert", "--desc", "convert heic to png", "--yes"])
+    assert rc == 0
+    assert (env / "heic-convert" / "SKILL.md").exists()
+    out = capsys.readouterr().out
+    assert "probationary" in out.lower()
+    assert "skill-creator" in out
+    # shows up as probation in status
+    capsys.readouterr()
+    main(["status"])
+    assert "prob" in capsys.readouterr().out
+
+
+def test_author_refuses_duplicate(env, capsys):
+    make_skill(env, "exists")
+    rc = main(["author", "exists", "--yes"])
+    assert rc == 1
+    assert "already exists" in capsys.readouterr().out
+
+
+def test_graduate_via_cli(env, capsys):
+    main(["author", "tryme", "--yes"])
+    capsys.readouterr()
+    assert main(["graduate", "tryme"]) == 0
+    assert "graduated" in capsys.readouterr().out
+    assert main(["graduate", "tryme"]) == 0  # idempotent
+    assert "not on probation" in capsys.readouterr().out

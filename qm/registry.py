@@ -54,10 +54,16 @@ class Skill:
     description: str
     state: str
     last_used: Optional[float] = None  # epoch seconds, None if never recorded
+    probation_since: Optional[float] = None  # set if admitted on probation
 
     @property
     def dir(self) -> Path:
         return self.path.parent
+
+    @property
+    def probation(self) -> bool:
+        """A probationary skill is active but on trial (newly authored)."""
+        return self.probation_since is not None
 
     @property
     def indexed(self) -> bool:
@@ -108,8 +114,10 @@ class Registry:
         cls,
         skills_dir: Optional[os.PathLike] = None,
         last_used: Optional[Dict[str, float]] = None,
+        probation: Optional[Dict[str, Dict]] = None,
     ) -> "Registry":
         last_used = last_used or {}
+        probation = probation or {}
         skills: List[Skill] = []
         for root in _resolve_roots(skills_dir):
             if not root.exists():
@@ -117,6 +125,8 @@ class Registry:
             for skill_md in sorted(root.glob("*/SKILL.md")):
                 fm = frontmatter.parse(skill_md.read_text(encoding="utf-8"))
                 name = fm.get("name") or skill_md.parent.name
+                prob = probation.get(name) or {}
+                since = prob.get("admitted") if isinstance(prob, dict) else None
                 skills.append(
                     Skill(
                         name=name,
@@ -124,6 +134,7 @@ class Registry:
                         description=fm.get("description", "") or "",
                         state=derive_state(fm),
                         last_used=last_used.get(name),
+                        probation_since=since if isinstance(since, (int, float)) else None,
                     )
                 )
         return cls(skills)

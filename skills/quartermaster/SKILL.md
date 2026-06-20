@@ -1,6 +1,6 @@
 ---
 name: quartermaster
-description: Manage the lifecycle of installed Claude Code skills — list their state, compile a per-project loadout, demote/hide unused skills to save context, restore them, and (only with explicit approval) delete. Use when the user wants to see installed skills, reduce skill clutter or context cost, turn a skill off without deleting it, or curate which skills are active for a project.
+description: Manage the lifecycle of installed Claude Code skills — list their state, compile a per-project loadout, demote/hide unused skills to save context, restore them, author new skills for recurring gaps, and (only with explicit approval) delete. Use when the user wants to see installed skills, reduce skill clutter or context cost, turn a skill off without deleting it, curate which skills are active, or create a skill for a capability they keep needing.
 ---
 
 # Quartermaster
@@ -47,6 +47,23 @@ qm <command>
 - `qm delete <skill> --yes` — permanently remove a (hidden) skill. **Destructive.**
 - `qm log` — print the audit trail of every transition.
 
+### Authoring arm (the capability-gap loop)
+
+- `qm gap "<what you needed>"` — record a capability gap: a need with no
+  matching skill. When the same gap recurs and nothing on the shelf covers it,
+  Quartermaster recommends authoring a new skill.
+- `qm gaps` — show clustered gaps and which ones warrant a new skill.
+- `qm author <name> [--desc ...] [--brief ...]` — scaffold a new skill and admit
+  it as **active, probationary** (on trial). This writes a stub only.
+- `qm graduate <skill>` — end a skill's probation once it has proven useful.
+
+## Probation
+
+A newly authored skill is admitted **probationary**: it is `active` and usable
+immediately, but on trial. `qm review` proposes graduating it if it gets used,
+or demoting it if it sits unused past the probation window. `qm status` marks
+probationary skills with `◉ prob`.
+
 ## How to behave when using this skill
 
 1. **Default to non-destructive verbs.** Reach for `demote`, `hide`, `compile`,
@@ -61,6 +78,12 @@ qm <command>
    they've already said go).
 5. **Reassure on reversibility.** Every non-delete change is undone with
    `qm restore <skill>`; mention this when you demote or hide something.
+6. **Author through skill-creator.** When `qm gaps` recommends a new skill (or
+   the user asks for one), run `qm author <name>` to create the probationary
+   stub, then invoke the **`skill-creator`** skill to write the actual
+   instructions into the generated `SKILL.md`. `qm author` only scaffolds — it
+   never writes the skill's content itself. Leave the skill probationary until
+   the user confirms it works, then `qm graduate <name>`.
 
 ## Notes
 
