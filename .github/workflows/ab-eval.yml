@@ -1,0 +1,67 @@
+name: A/B skill-selection eval
+
+# Manual trigger only — never runs on push (it spends API credits).
+# Add your key as a repo secret first:
+#   Settings → Secrets and variables → Actions → New repository secret
+#   ANTHROPIC_API_KEY   (and/or OPENAI_API_KEY for --provider openai)
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: "anthropic | openai | command | offline"
+        default: "anthropic"
+      model:
+        description: "model id (blank = claude-opus-4-8 for anthropic; required for openai)"
+        default: ""
+      base_url:
+        description: "OpenAI-compatible endpoint (blank for OpenAI/Anthropic)"
+        default: ""
+      n:
+        description: "number of eval tasks"
+        default: "60"
+      cap:
+        description: "loadout size"
+        default: "30"
+
+jobs:
+  ab-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Build the skills corpus
+        run: |
+          git clone --depth 1 https://github.com/davila7/claude-code-templates /tmp/c8
+          git clone --depth 1 https://github.com/anthropics/skills              /tmp/corpus
+          python3 benchmark/build_corpus.py /tmp/c8 /tmp/corpus --out /tmp/skillhub
+
+      - name: Run the A/B eval
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          python3 benchmark/ab_eval/run_ab_eval.py /tmp/skillhub /tmp/c8 \
+            --provider "${{ github.event.inputs.provider }}" \
+            --model "${{ github.event.inputs.model }}" \
+            --base-url "${{ github.event.inputs.base_url }}" \
+            --n "${{ github.event.inputs.n }}" \
+            --cap "${{ github.event.inputs.cap }}" \
+            --out AB_RESULTS.md
+
+      - name: Publish results to the run summary
+        if: always()
+        run: cat AB_RESULTS.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload AB_RESULTS.md
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ab-results
+          path: AB_RESULTS.md

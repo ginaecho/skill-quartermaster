@@ -29,9 +29,62 @@ People avoid cleanup tools because of one fear: **"what if it deletes the wrong 
 
 ## What it does
 
+Measured on **851 real open-source skills** (Anthropic + community hubs — see
+[`benchmark/`](./benchmark/)):
+
 ```
-200 skills installed  →  12 loaded for this project  →  ~8k tokens saved  →  0 deleted
+851 skills installed  →  30 loaded for this project  →  ~57.5k tokens saved (96%)  →  0 deleted
 ```
+
+| Claim | Evidence on the 851-skill corpus |
+|---|---|
+| Cuts the model's selection set | auto-select set **851 → 30** (28× smaller, at the ~30 sweet spot) |
+| Saves context tokens | **~59.7k → ~2.2k** indexed tokens (~57.5k saved, 96%) |
+| Never deletes | **851 → 851** files on disk, **0** deleted |
+| Fully reversible | demote→restore **byte-identical on 200/200** sampled skills |
+| Usage-driven curation | flags **809** stale skills to demote, then **737** to hide — fresh skills left active |
+| **Keeps what the task needs** | trimmed loadout is **~10× more relevant than random**; **100% recall** of specifically-needed skills at cap=30 (vs 3.5% random) |
+| **Doesn't hurt the agent** | skill-selection A/B (real model, full set vs loadout) — _run locally to populate, see below_ |
+
+Full reports: [`BENCHMARK.md`](./BENCHMARK.md) (lifecycle + savings),
+[`PERFORMANCE.md`](./PERFORMANCE.md) (capability retention — proof the token
+savings don't drop the skills a task needs), and the live
+[A/B selection eval](./benchmark/ab_eval/) (proof the loadout doesn't degrade
+which skill the model picks). All reproducible from [`benchmark/`](./benchmark/).
+
+### Does trimming hurt the agent? (live A/B)
+
+Saving tokens is only worth it if the agent still picks the right skill. The
+[`benchmark/ab_eval/`](./benchmark/ab_eval/) harness puts a real model
+(`claude-opus-4-8`) in the loop and measures **skill-selection accuracy** on
+tasks with known-correct skills, comparing the **full 851-skill set** against the
+**~30-skill loadout**. Because both conditions share the same task wording, the
+shared confounds cancel in the A−B difference — the hypothesis is **loadout ≥
+full**.
+
+```bash
+pip install anthropic && export ANTHROPIC_API_KEY=sk-ant-...
+
+# build the corpus once (clones real skill repos, dedupes into <name>/SKILL.md)
+git clone --depth 1 https://github.com/davila7/claude-code-templates /tmp/c8
+git clone --depth 1 https://github.com/anthropics/skills              /tmp/corpus
+python3 benchmark/build_corpus.py /tmp/c8 /tmp/corpus --out /tmp/skillhub
+
+# run the A/B (uses /tmp/c8 for the gold category labels)
+python3 benchmark/ab_eval/run_ab_eval.py /tmp/skillhub /tmp/c8 --n 60
+# writes benchmark/ab_eval/AB_RESULTS.md
+```
+
+Provider-agnostic — pick any model/provider, not just Anthropic:
+`--provider openai --model gpt-4o`, any OpenAI-compatible endpoint via
+`--base-url` (OpenRouter/Groq/Azure, or a **local** Ollama/vLLM/LM Studio), or
+drive a real agent CLI with `--provider command --command "claude -p"` /
+`"copilot -p"`. See [`benchmark/ab_eval/`](./benchmark/ab_eval/).
+
+<!-- AB-RESULTS:START — paste the headline from benchmark/ab_eval/AB_RESULTS.md after the live run -->
+> _Live results pending — run the command above with your API key, then paste
+> the accuracy table here (full vs loadout, recall, Δ)._
+<!-- AB-RESULTS:END -->
 
 Quartermaster manages the **lifecycle** of your skills instead of their content. It moves skills along a tiered ladder based on what you actually use — and keeps a human veto on anything irreversible.
 

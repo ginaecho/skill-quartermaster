@@ -1,0 +1,21 @@
+# Quartermaster — dependencies
+#
+# The core CLI (qm/) and the lifecycle/benchmark scripts are PURE STANDARD
+# LIBRARY — `qm`, build_corpus.py, run_benchmark.py, and quality_experiment.py
+# need nothing installed. You only need the packages below for the unit tests
+# and the live A/B eval providers. Install just the one provider you use.
+
+# --- Tests ---
+pytest>=7.0
+
+# --- A/B eval providers (benchmark/ab_eval/run_ab_eval.py) ---
+# Install the latest; structured outputs / output_config need a recent SDK.
+# Anthropic backend  (--provider anthropic, the default)
+anthropic
+# OpenAI-compatible backend  (--provider openai)
+#   covers OpenAI, Azure, OpenRouter, Together, Groq, Fireworks, and LOCAL
+#   servers (Ollama / vLLM / LM Studio) via --base-url
+openai
+
+# The `command` backend (--provider command, e.g. "claude -p" / "copilot -p")
+# shells out to an agent CLI and needs no Python package — just that CLI on PATH.
