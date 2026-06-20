@@ -261,10 +261,11 @@ def main() -> int:
         "That requires an A/B eval: same tasks, **full skill set vs. compiled "
         "loadout**, graded by task success (e.g. SWE-bench-style pass@1 or a "
         "tool-selection-accuracy benchmark) with a human or LLM judge.")
-    out("- Such an eval needs many model calls and graded outcomes, so it is not "
-        "reproducible inside this offline harness. The design above is the "
-        "intended next step; this experiment validates the *necessary* condition "
-        "(the right skills are present) that any such eval depends on.")
+    out("- A runnable **skill-selection A/B harness** that does exactly this — "
+        "real model in the loop, full set vs. loadout, gold-hit accuracy — is in "
+        "`benchmark/ab_eval/` (set `ANTHROPIC_API_KEY` for the live run). It "
+        "closes the selection half; full task-*execution* grading (pass@1) needs "
+        "an execution sandbox and is the next rung.")
     out("- M2's *described-need* query is derived from each skill's own "
         "description (with name words removed), so it shares vocabulary with the "
         "target. It tests that a task description surfaces its skill, but real "

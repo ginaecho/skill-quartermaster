@@ -78,6 +78,15 @@ The report is explicit about **what it proves** (the right skills are present in
 the trimmed set) and **what it does not** (a live end-to-end LLM coding eval —
 the designed next step), including the upper/lower-bound caveats on each metric.
 
+## A/B eval — real model in the loop (`ab_eval/`)
+
+`quality_experiment.py` proves the *necessary* condition; the A/B harness in
+[`ab_eval/`](./ab_eval/) closes the loop with a real model. It measures
+**skill-selection accuracy** — full installed set vs. compiled loadout — on
+tasks with known correct skills, and reports whether trimming helps, hurts, or is
+neutral (the hypothesis: loadout ≥ full). Live run needs `ANTHROPIC_API_KEY`; an
+offline simulation validates the pipeline. See [`ab_eval/README.md`](./ab_eval/README.md).
+
 > Token counts are estimates (`len/4`), the standard rough heuristic; they
 > measure the *name + description* that progressive disclosure loads up front,
 > which is the standing per-session cost a large installed set imposes.

@@ -52,7 +52,7 @@ _Sample: 300 skills (named-need), 297 with a usable description (described-need)
 ## What this does NOT prove (and how to close it)
 
 - It does **not** measure end-to-end coding quality with a live model. That requires an A/B eval: same tasks, **full skill set vs. compiled loadout**, graded by task success (e.g. SWE-bench-style pass@1 or a tool-selection-accuracy benchmark) with a human or LLM judge.
-- Such an eval needs many model calls and graded outcomes, so it is not reproducible inside this offline harness. The design above is the intended next step; this experiment validates the *necessary* condition (the right skills are present) that any such eval depends on.
+- A runnable **skill-selection A/B harness** that does exactly this — real model in the loop, full set vs. loadout, gold-hit accuracy — is in `benchmark/ab_eval/` (set `ANTHROPIC_API_KEY` for the live run). It closes the selection half; full task-*execution* grading (pass@1) needs an execution sandbox and is the next rung.
 - M2's *described-need* query is derived from each skill's own description (with name words removed), so it shares vocabulary with the target. It tests that a task description surfaces its skill, but real user phrasing overlaps less — so treat M2 recall as an **upper bound** for keyword matching. The selector is v0.3 keyword matching; a semantic-embedding compiler would close the gap for genuine paraphrases.
 - M1's category precision is a **lower bound** on relevance: a real task (e.g. a web app) legitimately pulls skills from several categories (web-development *and* security *and* database), which count against a single-category precision but are still relevant.
 
