@@ -44,7 +44,7 @@ Measured on **851 real open-source skills** (Anthropic + community hubs — see
 | Fully reversible | demote→restore **byte-identical on 200/200** sampled skills |
 | Usage-driven curation | flags **809** stale skills to demote, then **737** to hide — fresh skills left active |
 | **Keeps what the task needs** | trimmed loadout is **~10× more relevant than random**; **100% recall** of specifically-needed skills at cap=30 (vs 3.5% random) |
-| **Doesn't hurt the agent** | skill-selection A/B (real model, full set vs loadout) — _run locally to populate, see below_ |
+| **Doesn't hurt the agent** | live skill-selection A/B (`claude-opus-4-8`, 60 tasks): loadout **97%** vs full set **93%** (**+3 pts**, 100% recall) — trimming doesn't degrade which skill the model picks |
 
 Full reports: [`BENCHMARK.md`](./BENCHMARK.md) (lifecycle + savings),
 [`PERFORMANCE.md`](./PERFORMANCE.md) (capability retention — proof the token
@@ -82,8 +82,19 @@ drive a real agent CLI with `--provider command --command "claude -p"` /
 `"copilot -p"`. See [`benchmark/ab_eval/`](./benchmark/ab_eval/).
 
 <!-- AB-RESULTS:START — paste the headline from benchmark/ab_eval/AB_RESULTS.md after the live run -->
-> _Live results pending — run the command above with your API key, then paste
-> the accuracy table here (full vs loadout, recall, Δ)._
+**Live run** — `claude-opus-4-8`, 60 tasks (seed 7), full menu 840 skills, loadout cap 30:
+
+| Condition | menu size | gold-hit accuracy |
+|---|--:|--:|
+| **A — full installed set** | 840 | **93%** |
+| **B — Quartermaster loadout** | ≤30 | **97%** |
+| Δ (loadout − full) | | **+3 pts** |
+
+Recall (gold skill present in the loadout): **100%** · selection accuracy given present: **97%**.
+
+**Trimming to the loadout did not hurt selection (97% vs 93%)** — the agent finds the
+right skill at least as often with ~30 skills as with 840, at a fraction of the context
+cost. Full report: [`benchmark/ab_eval/AB_RESULTS.md`](./benchmark/ab_eval/AB_RESULTS.md).
 <!-- AB-RESULTS:END -->
 
 Quartermaster manages the **lifecycle** of your skills instead of their content. It moves skills along a tiered ladder based on what you actually use — and keeps a human veto on anything irreversible.
