@@ -1,0 +1,19 @@
+{
+  "name": "skill-quartermaster",
+  "owner": {
+    "name": "Quartermaster contributors"
+  },
+  "metadata": {
+    "description": "A non-destructive skill manager for Claude Code.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "quartermaster",
+      "source": "./",
+      "description": "Compiles the right skill loadout for your project, then demotes and hides unused skills to keep your context window lean. Nothing is ever deleted without your yes.",
+      "version": "0.1.0",
+      "category": "productivity"
+    }
+  ]
+}
