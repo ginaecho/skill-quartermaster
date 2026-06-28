@@ -1,0 +1,20 @@
+# YAML 1.2
+---
+cff-version: 1.2.0
+title: "Quartermaster"
+message: "If you use this project, please cite the repository and preserve the authorship and license notices."
+type: software
+authors:
+  - family-names: "Chen"
+    given-names: "Tzu-Chun"
+    orcid: "https://orcid.org/0000-0002-8872-5318"
+abstract: "Quartermaster is a non-destructive skill manager that compiles a project-specific skill loadout, then demotes and hides unused skills to keep agent context lean without deleting installed skills."
+repository-code: "https://github.com/ginaecho/skill-quartermaster"
+url: "https://github.com/ginaecho/skill-quartermaster"
+license: "MIT"
+keywords:
+  - "skills"
+  - "agent tooling"
+  - "context management"
+  - "developer tools"
+
