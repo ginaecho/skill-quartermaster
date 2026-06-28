@@ -14,6 +14,7 @@ Non-destructive skill manager — compiles the right skill loadout per project, 
   <img alt="status" src="https://img.shields.io/badge/status-alpha-orange">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="claude code" src="https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2">
+  <a href="https://doi.org/10.5281/zenodo.21009805"><img alt="DOI" src="https://zenodo.org/badge/DOI/10.5281/zenodo.21009805.svg"></a>
 </p>
 
 ---
