@@ -4,7 +4,7 @@ Non-destructive skill manager — compiles the right skill loadout per project, 
 <h1 align="center">🎖️ Quartermaster</h1>
 
 <p align="center">
-  <strong>A non-destructive skill manager for Claude Code.</strong><br>
+  <strong>A non-destructive skill manager for coding agents.</strong><br>
   Compiles the right skill <em>loadout</em> for your project, then quietly demotes and hides the skills you aren't using —<br>
   so your context window stays lean and your skill set stays relevant. <strong>Nothing is ever deleted without your yes.</strong>
 </p>
@@ -105,6 +105,7 @@ Quartermaster manages the **lifecycle** of your skills instead of their content.
 | **active** | ✅ indexed | ✅ | ✅ | ✅ |
 | **demoted** | ✅ indexed | ❌ | ✅ manual | ✅ |
 | **hidden** | ❌ | ❌ | ❌ | ✅ |
+| **archived** | ❌ | ❌ | ❌ | ✅ *(outside active roots)* |
 | **deleted** | ❌ | — | — | ❌ *(only after you approve)* |
 
 Every transition is **logged and reversible**. Demote and hide happen automatically; **delete never does**.
@@ -124,12 +125,18 @@ Once installed you get the `quartermaster` skill plus slash commands
 
 ```bash
 qm status              # show every skill, its state, last-used, token cost
+qm status --layers     # include metadata layer and priority
+qm runtimes            # list supported runtime adapters
+qm runtime-setup codex # write local setup files for a runtime adapter
 qm compile "<intent>"  # build an active loadout for this project
 qm review              # see proposed demotions/promotions and approve them
 qm restore <skill>     # bring anything back from demoted/hidden
 qm demote <skill>      # take a skill out of auto-selection (manual-only)
 qm hide <skill>        # remove a skill from context entirely
+qm archive <skill> --yes # move a skill to reversible archive storage
 qm log                 # print the audit trail of every change
+qm history <skill>     # inspect historical usage/selection metadata
+qm conflicts           # report explicit/inferred skill conflicts
 qm delete <skill> --yes  # human-gated removal (the only destructive action)
 
 # Authoring arm — turn recurring gaps into new skills
@@ -154,7 +161,52 @@ export QM_SKILLS_DIR=~/.claude/skills      # or your project's .claude/skills
 python3 bin/qm status
 ```
 
-Local state (usage telemetry + audit log) lives under `~/.quartermaster/`
+Quartermaster is runtime-aware. Claude Code remains the default, and Phase 0
+also exposes adapter names for Codex, GitHub Copilot CLI, VS Code, and generic
+command agents:
+
+```bash
+qm runtimes
+qm runtime-setup codex
+qm runtime-setup --all
+qm --runtime claude status
+qm --runtime generic status
+QM_RUNTIME=codex qm status
+```
+
+Non-Claude adapters use Quartermaster-owned state metadata (`qm-state`),
+workspace-local setup files, and exported loadout manifests as the compatibility
+layer. Runtime setup writes local guidance/manifests without needing vendor
+credentials:
+
+```bash
+qm runtime-setup codex
+qm runtime-setup copilot
+qm runtime-setup vscode
+qm runtime-setup generic
+```
+
+Skills can optionally declare Quartermaster metadata in frontmatter:
+
+```yaml
+qm-layer: guardrail
+qm-priority: 100
+qm-tags: security, secrets
+qm-risk: network, production
+qm-provides: secret-scan
+qm-requires-guardrails: security-review
+qm-conflicts-with: unsafe-deploy
+```
+
+All metadata is optional. Existing skills without these keys still load, and
+Quartermaster infers a conservative default layer for status/reporting.
+
+`qm compile` now explains loadouts by layer and writes a runtime loadout
+manifest under `$QM_HOME/loadouts/` when applied, so non-Claude runtimes can
+consume the same selected skill set through their adapter.
+
+Local state (usage telemetry, audit log, and the historical skill dictionary)
+lives under `~/.quartermaster/`
 (override with `QM_HOME`). Nothing ever leaves your machine.
 
 ## How it works
@@ -176,11 +228,15 @@ flowchart LR
 1. **Registry** — an index of every skill on disk with its state, description embedding, and last-used timestamp.
 2. **Intent compiler** — selects an initial active set from your project intent + style file, kept near the ~30-skill accuracy sweet spot.
 3. **Telemetry** — logs which skills actually fire per task (via skill hooks). Local-only; nothing leaves your machine.
-4. **Policy engine** — *proposes* demotions (unused for N days), promotions (you keep invoking a demoted skill), and authoring (repeated gaps with no matching skill).
-5. **Human gate** — batched approvals; deletion only after long-demoted **and** explicit confirmation.
-6. **Authoring arm** — hands genuine gaps to `skill-creator`, admitting new skills as `active, probationary`.
+4. **Historical dictionary** — records first/last seen, usage count, selection count, state transitions, metadata, and useful intents per skill.
+5. **Policy engine** — *proposes* demotions (unused for N days), promotions (you keep invoking a demoted skill), and authoring (repeated gaps with no matching skill).
+6. **Human gate** — batched approvals; deletion only after long-demoted **and** explicit confirmation.
+7. **Authoring arm** — hands genuine gaps to `skill-creator`, admitting new skills as `active, probationary`.
 
-Under the hood these states map to existing Claude Code primitives — Quartermaster configures them, it doesn't reinvent them.
+Under the hood these states map to the selected runtime's primitives where
+available. Claude Code uses its native skill frontmatter flags; generic and
+future adapters use Quartermaster-owned metadata until native integration is
+implemented.
 
 ## Why non-destructive matters
 

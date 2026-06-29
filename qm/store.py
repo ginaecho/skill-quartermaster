@@ -41,6 +41,101 @@ def _probation_path() -> Path:
     return _ensure_home() / "probation.json"
 
 
+def _skills_history_path() -> Path:
+    return _ensure_home() / "skills.json"
+
+
+# --- Historical skill dictionary ----------------------------------------
+
+def read_skill_history() -> Dict[str, Dict]:
+    p = _skills_history_path()
+    if not p.exists():
+        return {}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_skill_history(data: Dict[str, Dict]) -> None:
+    _skills_history_path().write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _history_entry(data: Dict[str, Dict], skill: str, *, ts: Optional[float] = None) -> Dict:
+    now = ts if ts is not None else time.time()
+    entry = data.setdefault(
+        skill,
+        {
+            "first_seen": now,
+            "last_seen": now,
+            "last_used": None,
+            "usage_count": 0,
+            "selected_count": 0,
+            "demoted_count": 0,
+            "hidden_count": 0,
+            "archive_count": 0,
+            "states": {},
+            "useful_intents": [],
+            "conflict_notes": [],
+            "archive_path": "",
+            "path": "",
+            "runtime": "",
+            "metadata": {},
+        },
+    )
+    entry.setdefault("first_seen", now)
+    entry["last_seen"] = now
+    return entry
+
+
+def note_skill_seen(
+    skill: str,
+    *,
+    path: str = "",
+    state: str = "",
+    runtime: str = "",
+    metadata: Optional[Dict] = None,
+    ts: Optional[float] = None,
+) -> Dict:
+    data = read_skill_history()
+    entry = _history_entry(data, skill, ts=ts)
+    if path:
+        entry["path"] = str(path)
+    if runtime:
+        entry["runtime"] = runtime
+    if metadata is not None:
+        entry["metadata"] = metadata
+    if state:
+        states = entry.setdefault("states", {})
+        states[state] = states.get(state, 0) + 1
+        entry["state"] = state
+    _write_skill_history(data)
+    return entry
+
+
+def note_skill_selected(skill: str, *, intent: str = "", ts: Optional[float] = None) -> Dict:
+    data = read_skill_history()
+    entry = _history_entry(data, skill, ts=ts)
+    entry["selected_count"] = int(entry.get("selected_count") or 0) + 1
+    if intent:
+        intents = entry.setdefault("useful_intents", [])
+        if intent not in intents:
+            intents.append(intent)
+    _write_skill_history(data)
+    return entry
+
+
+def note_conflict(skill: str, note: str, *, ts: Optional[float] = None) -> Dict:
+    data = read_skill_history()
+    entry = _history_entry(data, skill, ts=ts)
+    notes = entry.setdefault("conflict_notes", [])
+    if note and note not in notes:
+        notes.append(note)
+    _write_skill_history(data)
+    return entry
+
+
 # --- Audit log -----------------------------------------------------------
 
 def record_transition(
@@ -64,6 +159,20 @@ def record_transition(
     }
     with _audit_path().open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(entry) + "\n")
+    data = read_skill_history()
+    hist = _history_entry(data, skill, ts=entry["ts"])
+    hist["state"] = to_state
+    if path:
+        hist["path"] = str(path)
+    states = hist.setdefault("states", {})
+    states[to_state] = states.get(to_state, 0) + 1
+    if to_state == "demoted":
+        hist["demoted_count"] = int(hist.get("demoted_count") or 0) + 1
+    elif to_state == "hidden":
+        hist["hidden_count"] = int(hist.get("hidden_count") or 0) + 1
+    elif to_state == "archived":
+        hist["archive_count"] = int(hist.get("archive_count") or 0) + 1
+    _write_skill_history(data)
     return entry
 
 
@@ -83,9 +192,15 @@ def read_audit() -> List[Dict]:
 
 def record_usage(skill: str, *, ts: Optional[float] = None) -> None:
     """Record that ``skill`` fired. Called by the PreToolUse hook."""
-    entry = {"ts": ts if ts is not None else time.time(), "skill": skill}
+    when = ts if ts is not None else time.time()
+    entry = {"ts": when, "skill": skill}
     with _usage_path().open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(entry) + "\n")
+    data = read_skill_history()
+    hist = _history_entry(data, skill, ts=when)
+    hist["last_used"] = when
+    hist["usage_count"] = int(hist.get("usage_count") or 0) + 1
+    _write_skill_history(data)
 
 
 def last_used_map() -> Dict[str, float]:

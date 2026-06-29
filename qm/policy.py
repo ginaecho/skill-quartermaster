@@ -11,7 +11,8 @@ import time
 from dataclasses import dataclass
 from typing import List, Optional
 
-from .registry import ACTIVE, DEMOTED, HIDDEN, Registry, Skill
+from . import metadata
+from .registry import ACTIVE, ARCHIVED, DEMOTED, HIDDEN, Registry, Skill
 
 # "probationary" is an overlay label (see qm.authoring), not a registry state.
 PROBATION = "probationary"
@@ -21,6 +22,7 @@ DAY = 86400.0
 # Defaults; the CLI exposes overrides.
 DEMOTE_AFTER_DAYS = 14
 HIDE_AFTER_DAYS = 30
+ARCHIVE_AFTER_DAYS = 90
 PROBATION_DAYS = 14
 
 
@@ -50,6 +52,7 @@ def propose(
     *,
     demote_after_days: int = DEMOTE_AFTER_DAYS,
     hide_after_days: int = HIDE_AFTER_DAYS,
+    archive_after_days: int = ARCHIVE_AFTER_DAYS,
     probation_days: int = PROBATION_DAYS,
     now: Optional[float] = None,
 ) -> List[Proposal]:
@@ -67,6 +70,13 @@ def propose(
 
     for skill in registry:
         age = _age_days(skill, now)
+        demote_window = demote_after_days
+        hide_window = hide_after_days
+        archive_window = archive_after_days
+        if skill.metadata.layer == metadata.GUARDRAIL:
+            demote_window *= 4
+            hide_window *= 4
+            archive_window *= 4
 
         if skill.probation:
             # Probationary skills are on trial; judge them on their own window
@@ -93,14 +103,14 @@ def propose(
             continue
 
         if skill.state == ACTIVE:
-            if age is not None and age >= demote_after_days:
+            if age is not None and age >= demote_window:
                 out.append(
                     Proposal(
                         skill.name, "demote", ACTIVE, DEMOTED,
-                        f"unused for {age:.0f}d (>= {demote_after_days}d)",
+                        f"unused for {age:.0f}d (>= {demote_window}d)",
                     )
                 )
-            elif skill.last_used is None and demote_after_days <= 0:
+            elif skill.last_used is None and demote_window <= 0:
                 out.append(
                     Proposal(
                         skill.name, "demote", ACTIVE, DEMOTED,
@@ -109,7 +119,7 @@ def propose(
                 )
 
         elif skill.state == DEMOTED:
-            if age is not None and age < demote_after_days:
+            if age is not None and age < demote_window:
                 # It's been used recently despite being demoted -> promote.
                 out.append(
                     Proposal(
@@ -117,14 +127,32 @@ def propose(
                         f"used {age:.0f}d ago while demoted",
                     )
                 )
-            elif age is None or age >= hide_after_days:
+            elif age is None or age >= hide_window:
                 detail = (
-                    f"unused for {age:.0f}d (>= {hide_after_days}d)"
+                    f"unused for {age:.0f}d (>= {hide_window}d)"
                     if age is not None
                     else "never observed firing"
                 )
                 out.append(
                     Proposal(skill.name, "hide", DEMOTED, HIDDEN, detail)
+                )
+
+        elif skill.state == HIDDEN:
+            if age is None or age >= archive_window:
+                detail = (
+                    f"unused for {age:.0f}d (>= {archive_window}d)"
+                    if age is not None
+                    else "never observed firing"
+                )
+                out.append(Proposal(skill.name, "archive", HIDDEN, ARCHIVED, detail))
+
+        elif skill.state == ARCHIVED:
+            if age is not None and age < demote_window:
+                out.append(
+                    Proposal(
+                        skill.name, "restore", ARCHIVED, ACTIVE,
+                        f"recently requested/used {age:.0f}d ago while archived",
+                    )
                 )
 
     return out

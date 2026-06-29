@@ -168,6 +168,13 @@ cleanup.
 
 Make Quartermaster provider-neutral before adding richer orchestration rules.
 
+Status: implemented and verified. Claude remains the default runtime; `codex`,
+`copilot`, `vscode`, and `generic` adapters are selectable, provide
+runtime-specific roots/state semantics, export loadout manifests, and write
+workspace-local setup files through `qm runtime-setup`. Live telemetry from
+external non-Claude products remains best-effort because those runtimes do not
+share one common hook API.
+
 Deliverables:
 
 - Add `qm/adapters.py` or `qm/adapters/` with a minimal adapter protocol:
@@ -204,6 +211,10 @@ Acceptance criteria:
 
 Add a dependency-free metadata module, likely `qm/metadata.py`.
 
+Status: implemented and verified. Metadata is optional, parsed without new
+dependencies, attached to each registry `Skill`, inferred for existing skills,
+and visible through `qm status --layers`.
+
 Deliverables:
 
 - Parse optional frontmatter keys:
@@ -231,6 +242,10 @@ Acceptance criteria:
 
 Extend local state from raw logs into a queryable skill history index.
 
+Status: implemented and verified. `$QM_HOME/skills.json` records seen skills,
+usage, selections, transitions, metadata, runtime, path, and useful intents;
+`qm history <skill>` exposes the entry.
+
 Deliverables:
 
 - Add `history.json` or `skills.json` under `QM_HOME`.
@@ -256,6 +271,11 @@ Acceptance criteria:
 ### Phase 3: Layer-Aware Compiler
 
 Replace the current flat keyword `compile_loadout` ranking with a layered plan.
+
+Status: implemented and verified. Compile plans now group keep selections by
+layer, compute transparent priority from intent/metadata/history, reserve room
+for guardrail/style layers, report cap/off-intent drops, and export a runtime
+loadout manifest through the selected adapter.
 
 Deliverables:
 
@@ -283,6 +303,11 @@ Acceptance criteria:
 
 Make safety constraints part of compilation and review policy.
 
+Status: implemented and verified. Risky action/tool skills are blocked when
+required guardrails are missing, available matching guardrails are auto-added,
+lower-priority non-guardrails can be displaced to make room, and policy review
+uses longer stale windows for guardrail skills.
+
 Deliverables:
 
 - Add a guardrail resolver:
@@ -306,6 +331,12 @@ Acceptance criteria:
 
 Add explicit and inferred conflict handling.
 
+Status: implemented and verified. Explicit `qm-conflicts-with` and inferred
+action/tool provider conflicts are detected; compile resolves non-guardrail
+conflicts by priority, lets guardrails dominate non-guardrails, blocks
+guardrail conflicts for user decision, and `qm conflicts` reports installed
+conflicts.
+
 Deliverables:
 
 - Add `qm/conflicts.py`.
@@ -324,6 +355,11 @@ Acceptance criteria:
 ### Phase 6: Archive And Restore
 
 Add reversible archived storage as a new lifecycle state.
+
+Status: implemented and verified. `qm archive` moves skill directories to
+`$QM_HOME/archive` with checksums and an index manifest, `qm status --all`
+includes archived skills, `qm restore` restores archived skills
+byte-identically, and archived deletion remains explicitly `--yes` gated.
 
 Deliverables:
 
@@ -348,6 +384,10 @@ Acceptance criteria:
 
 Make review proposals use the new concepts.
 
+Status: implemented and verified. Review policy proposes hidden-to-archive and
+archived-to-restore transitions, applies archive/restore proposals through the
+archive module, and preserves guardrail-aware stale windows.
+
 Deliverables:
 
 - Layer-aware stale rules:
@@ -368,6 +408,12 @@ Acceptance criteria:
 ### Phase 8: Evaluation And Benchmarks
 
 Update the benchmark suite to prove the richer compiler helps.
+
+Status: implemented and verified for local deterministic metrics.
+`qm.evaluation` and `benchmark/layered_eval.py` report guardrail recall,
+blocked risky actions, conflict count, archived count, and token/context
+metrics. Live model/task-success benchmarking remains outside this local
+verification pass.
 
 Deliverables:
 

@@ -9,9 +9,9 @@ from __future__ import annotations
 import time
 from typing import Dict, List, Optional
 
-from .registry import ACTIVE, DEMOTED, HIDDEN, Registry, Skill
+from .registry import ACTIVE, ARCHIVED, DEMOTED, HIDDEN, Registry, Skill
 
-_STATE_GLYPH = {ACTIVE: "●", DEMOTED: "◐", HIDDEN: "○"}
+_STATE_GLYPH = {ACTIVE: "●", DEMOTED: "◐", HIDDEN: "○", ARCHIVED: "□"}
 
 
 def _fmt_age(last_used: Optional[float], now: float) -> str:
@@ -37,6 +37,7 @@ def token_summary(registry: Registry) -> Dict[str, int]:
     active = registry.by_state(ACTIVE)
     demoted = registry.by_state(DEMOTED)
     hidden = registry.by_state(HIDDEN)
+    archived = registry.by_state(ARCHIVED)
 
     context_tokens = sum(s.index_tokens for s in active + demoted)
     saved_tokens = sum(s.index_tokens for s in hidden)
@@ -47,6 +48,7 @@ def token_summary(registry: Registry) -> Dict[str, int]:
         "active": len(active),
         "demoted": len(demoted),
         "hidden": len(hidden),
+        "archived": len(archived),
         "loaded": len(active),  # auto-loadable
         "in_context": len(active) + len(demoted),
         "context_tokens": context_tokens,
@@ -65,27 +67,47 @@ def render_headline(registry: Registry) -> str:
     )
 
 
-def render_status(registry: Registry, *, now: Optional[float] = None) -> str:
+def render_status(
+    registry: Registry,
+    *,
+    now: Optional[float] = None,
+    show_layers: bool = False,
+) -> str:
     now = now if now is not None else time.time()
     skills: List[Skill] = registry.all
     if not skills:
-        return "No skills found. Set QM_SKILLS_DIR or run inside a project with .claude/skills/."
+        return "No skills found. Set QM_SKILLS_DIR or run inside a project with runtime skills."
 
     name_w = max(4, min(32, max(len(s.name) for s in skills)))
     rows = []
-    header = f"  {'SKILL'.ljust(name_w)}  {'STATE':<8} {'LAST USED':<10} {'TOKENS':>7}"
+    if show_layers:
+        header = (
+            f"  {'SKILL'.ljust(name_w)}  {'STATE':<8} {'LAYER':<10} "
+            f"{'PRI':>4} {'LAST USED':<10} {'TOKENS':>7}"
+        )
+    else:
+        header = f"  {'SKILL'.ljust(name_w)}  {'STATE':<8} {'LAST USED':<10} {'TOKENS':>7}"
     rows.append(header)
     rows.append("  " + "-" * (len(header) - 2))
     for s in skills:
         glyph = "◉" if s.probation else _STATE_GLYPH.get(s.state, "?")
         label = "prob" if s.probation else s.state
         tok = _human_tokens(s.index_tokens) if s.indexed else "-"
-        rows.append(
-            f"  {s.name[:name_w].ljust(name_w)}  "
-            f"{glyph} {label:<6} "
-            f"{_fmt_age(s.last_used, now):<10} "
-            f"{tok:>7}"
-        )
+        base = f"  {s.name[:name_w].ljust(name_w)}  {glyph} {label:<6} "
+        if show_layers:
+            rows.append(
+                f"{base}"
+                f"{s.metadata.layer:<10} "
+                f"{s.metadata.priority:>4} "
+                f"{_fmt_age(s.last_used, now):<10} "
+                f"{tok:>7}"
+            )
+        else:
+            rows.append(
+                f"{base}"
+                f"{_fmt_age(s.last_used, now):<10} "
+                f"{tok:>7}"
+            )
 
     summary = token_summary(registry)
     probationary = [s for s in skills if s.probation]
@@ -95,6 +117,7 @@ def render_status(registry: Registry, *, now: Optional[float] = None) -> str:
         f"{summary['active']} active  ·  "
         f"{summary['demoted']} demoted  ·  "
         f"{summary['hidden']} hidden"
+        + (f"  ·  {summary['archived']} archived" if summary["archived"] else "")
         + (f"  ·  {len(probationary)} on probation" if probationary else "")
     )
     rows.append(

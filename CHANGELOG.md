@@ -3,6 +3,48 @@
 All notable changes to Quartermaster. The project follows the phased roadmap
 in the README.
 
+## Unreleased — runtime adapters
+
+- Added the first Phase 0 runtime adapter seam. `qm --runtime` and
+  `QM_RUNTIME` now select between `claude`, `codex`, `copilot`, `vscode`, and
+  `generic` adapters; `qm runtimes` lists them.
+- Preserved Claude Code as the default runtime while moving root discovery and
+  state derivation/writes behind adapter methods.
+- Added generic non-Claude state handling through Quartermaster-owned
+  `qm-state` frontmatter so future Codex/Copilot/VS Code packaging can share
+  the same lifecycle core.
+- Added the Phase 1 skill metadata model. Quartermaster now parses optional
+  `qm-layer`, `qm-priority`, `qm-tags`, `qm-risk`, `qm-provides`,
+  `qm-requires`, `qm-requires-guardrails`, and `qm-conflicts-with`
+  frontmatter, attaches normalized metadata to registry entries, infers layers
+  for existing skills, and exposes `qm status --layers`.
+- Added the Phase 2 historical dictionary at `$QM_HOME/skills.json`. Registry
+  discovery, usage telemetry, transitions, and compile selections now update a
+  queryable per-skill history; `qm history <skill>` prints it.
+- Added the Phase 3 layer-aware compiler. Compile plans now group selected
+  skills by layer, compute transparent priority from intent/metadata/history,
+  reserve room for guardrail/style skills, explain dropped skills, and export a
+  runtime loadout manifest through the selected adapter.
+- Added Phase 4 guardrail dominance. Risky action/tool skills are blocked
+  unless required guardrails are present; matching guardrails are auto-added and
+  can displace lower-priority non-guardrails. Policy review uses longer stale
+  windows for guardrail skills.
+- Added Phase 5 conflict detection. Quartermaster detects explicit
+  `qm-conflicts-with` conflicts and inferred action/tool provider conflicts,
+  resolves compile-time non-guardrail conflicts by priority, lets guardrails
+  dominate non-guardrails, blocks conflicting guardrails for user decision, and
+  exposes `qm conflicts`.
+- Added Phase 6 archived-but-restorable storage. `qm archive <skill>` moves a
+  skill to `$QM_HOME/archive`, records checksums and a manifest, `qm status
+  --all` shows archived skills, `qm restore <skill>` restores byte-identically,
+  and archived deletion remains `--yes` gated.
+- Added Phase 7 policy integration. `qm review` now includes archived skills,
+  can propose hidden-to-archive and archived-to-restore transitions, and applies
+  archive/restore proposals through reversible archive storage.
+- Added Phase 8 evaluation support. `qm.evaluation` and
+  `benchmark/layered_eval.py` report guardrail recall, blocked count, conflict
+  count, archived count, and context/token metrics for layered loadouts.
+
 ## v0.5 — feedback loop
 
 - `qm feedback "<gripe>"` routes a plain-language complaint to the right lever:

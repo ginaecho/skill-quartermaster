@@ -1,13 +1,19 @@
 ---
-description: Show every installed skill, its lifecycle state, last-used date, and the token-saved report.
+description: Show installed skills, lifecycle state, optional layer metadata, archived skills, and token-saved report.
+argument-hint: "[--layers] [--all]"
 ---
 
-Run Quartermaster's status report and show the output to the user:
+Run Quartermaster's status report and show the output to the user.
+
+Use `$ARGUMENTS` if provided, for example `--layers` or `--all`:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/bin/qm" status
+python3 "${CLAUDE_PLUGIN_ROOT}/bin/qm" status $ARGUMENTS
 ```
 
 Summarize the headline numbers (skills installed, loaded, tokens saved) and
-point out anything notable (e.g. skills unused for a long time that could be
-demoted). Do not make any changes — `status` is read-only.
+point out anything notable:
+- `--layers` shows metadata layer and priority.
+- `--all` includes archived skills.
+
+Do not make any changes — `status` is read-only.

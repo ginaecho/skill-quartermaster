@@ -16,12 +16,17 @@ First show the plan without applying:
 python3 "${CLAUDE_PLUGIN_ROOT}/bin/qm" compile "<intent>" --dry-run
 ```
 
-Present the proposed keep/demote split to the user. Once they approve, apply it:
+Present the proposed layered keep/demote/block split to the user. Explain any
+guardrails, conflicts, or blocked risky skills before applying. Once they
+approve, apply it:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/bin/qm" compile "<intent>" --yes
 ```
 
-Then run `qm status` so the user sees the resulting loadout and token savings.
+Then run `qm status --layers` so the user sees the resulting loadout, layer
+priority, and token savings. Applied compiles also write a loadout manifest
+under `$QM_HOME/loadouts/` through the selected runtime adapter.
+
 Nothing is deleted — off-intent skills are only demoted and fully reversible
 with `qm restore`.

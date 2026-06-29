@@ -1,9 +1,9 @@
 """The registry: the shelf of every skill on disk and its lifecycle state.
 
-State is *derived* from the skill's own frontmatter flags so that the registry
-is always a faithful read of the filesystem — there is no separate database
-that can drift out of sync. Quartermaster configures existing Claude Code
-primitives; it does not invent a parallel source of truth.
+State is *derived* from the selected runtime's frontmatter/config flags so that
+the registry is always a faithful read of the filesystem — there is no separate
+database that can drift out of sync. Quartermaster configures native runtime
+primitives where possible; it does not invent a parallel source of truth.
 
 State mapping (see README state table):
 
@@ -15,26 +15,21 @@ State mapping (see README state table):
 
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from . import frontmatter
+from . import adapters, frontmatter, metadata, store
 
-ACTIVE = "active"
-DEMOTED = "demoted"
-HIDDEN = "hidden"
+ACTIVE = adapters.ACTIVE
+DEMOTED = adapters.DEMOTED
+HIDDEN = adapters.HIDDEN
+ARCHIVED = "archived"
 
-STATES = (ACTIVE, DEMOTED, HIDDEN)
+STATES = (ACTIVE, DEMOTED, HIDDEN, ARCHIVED)
 
-# Standard locations Claude Code loads skills from. Project scope first so a
-# project's own skills win in listings. These are scanned when no explicit
-# skills directory is configured.
-DEFAULT_SKILL_ROOTS = (
-    Path(".claude/skills"),
-    Path.home() / ".claude" / "skills",
-)
+# Backwards-compatible export for callers that referenced Claude defaults.
+DEFAULT_SKILL_ROOTS = adapters.CLAUDE.default_roots
 
 
 def _estimate_tokens(text: str) -> int:
@@ -55,6 +50,8 @@ class Skill:
     state: str
     last_used: Optional[float] = None  # epoch seconds, None if never recorded
     probation_since: Optional[float] = None  # set if admitted on probation
+    runtime: str = adapters.CLAUDE.name
+    metadata: metadata.SkillMetadata = field(default_factory=metadata.SkillMetadata)
 
     @property
     def dir(self) -> Path:
@@ -81,22 +78,13 @@ class Skill:
 
 
 def derive_state(fm: frontmatter.Frontmatter) -> str:
-    disabled = fm.get_bool("disable-model-invocation", False)
-    user_invocable = fm.get_bool("user-invocable", True)
-    if disabled and not user_invocable:
-        return HIDDEN
-    if disabled:
-        return DEMOTED
-    return ACTIVE
+    """Backwards-compatible Claude state derivation helper."""
+    return adapters.CLAUDE.derive_state(fm)
 
 
-def _resolve_roots(skills_dir: Optional[os.PathLike] = None) -> List[Path]:
-    if skills_dir is not None:
-        return [Path(skills_dir)]
-    env = os.environ.get("QM_SKILLS_DIR")
-    if env:
-        return [Path(p).expanduser() for p in env.split(os.pathsep) if p]
-    return [p for p in DEFAULT_SKILL_ROOTS]
+def _resolve_roots(skills_dir: Optional[Path] = None, runtime: Optional[str] = None) -> List[Path]:
+    adapter = adapters.get(runtime)
+    return adapters.resolve_roots(adapter=adapter, skills_dir=skills_dir)
 
 
 class Registry:
@@ -112,29 +100,67 @@ class Registry:
     @classmethod
     def load(
         cls,
-        skills_dir: Optional[os.PathLike] = None,
+        skills_dir: Optional[Path] = None,
         last_used: Optional[Dict[str, float]] = None,
         probation: Optional[Dict[str, Dict]] = None,
+        runtime: Optional[str] = None,
+        include_archived: bool = False,
     ) -> "Registry":
         last_used = last_used or {}
         probation = probation or {}
+        adapter = adapters.get(runtime)
         skills: List[Skill] = []
-        for root in _resolve_roots(skills_dir):
+        for root in adapters.resolve_roots(adapter=adapter, skills_dir=skills_dir):
             if not root.exists():
                 continue
             for skill_md in sorted(root.glob("*/SKILL.md")):
                 fm = frontmatter.parse(skill_md.read_text(encoding="utf-8"))
                 name = fm.get("name") or skill_md.parent.name
+                description = fm.get("description", "") or ""
                 prob = probation.get(name) or {}
                 since = prob.get("admitted") if isinstance(prob, dict) else None
+                state = adapter.derive_state(fm)
+                meta = metadata.parse(fm, name=name, description=description)
                 skills.append(
                     Skill(
                         name=name,
                         path=skill_md,
-                        description=fm.get("description", "") or "",
-                        state=derive_state(fm),
+                        description=description,
+                        state=state,
                         last_used=last_used.get(name),
                         probation_since=since if isinstance(since, (int, float)) else None,
+                        runtime=adapter.name,
+                        metadata=meta,
+                    )
+                )
+                store.note_skill_seen(
+                    name,
+                    path=skill_md,
+                    state=state,
+                    runtime=adapter.name,
+                    metadata=asdict(meta),
+                )
+        if include_archived:
+            from . import archive
+
+            for entry in archive.read_index().values():
+                skill_md = Path(entry.get("archive_path", "")) / "SKILL.md"
+                if not skill_md.exists():
+                    continue
+                fm = frontmatter.parse(skill_md.read_text(encoding="utf-8"))
+                name = fm.get("name") or entry.get("name") or skill_md.parent.name
+                description = fm.get("description", "") or ""
+                meta = metadata.parse(fm, name=name, description=description)
+                skills.append(
+                    Skill(
+                        name=name,
+                        path=skill_md,
+                        description=description,
+                        state=ARCHIVED,
+                        last_used=last_used.get(name),
+                        probation_since=None,
+                        runtime=entry.get("runtime") or adapter.name,
+                        metadata=meta,
                     )
                 )
         return cls(skills)

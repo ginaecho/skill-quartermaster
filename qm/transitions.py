@@ -8,18 +8,8 @@ and handled separately.
 
 from __future__ import annotations
 
-from typing import Optional
-
-from . import frontmatter, store
-from .registry import ACTIVE, DEMOTED, HIDDEN, Skill, derive_state
-
-# Desired frontmatter flag configuration for each target state.
-# None means "remove the key entirely".
-_FLAGS = {
-    ACTIVE: {"disable-model-invocation": None, "user-invocable": None},
-    DEMOTED: {"disable-model-invocation": "true", "user-invocable": None},
-    HIDDEN: {"disable-model-invocation": "true", "user-invocable": "false"},
-}
+from . import adapters, frontmatter, store
+from .registry import ACTIVE, DEMOTED, HIDDEN, Skill
 
 
 class TransitionError(Exception):
@@ -32,9 +22,10 @@ def set_state(skill: Skill, target: str, *, reason: str = "", actor: str = "qm")
     Returns the previous state. A no-op (already in ``target``) still returns
     the state but writes nothing.
     """
-    if target not in _FLAGS:
+    if target not in (ACTIVE, DEMOTED, HIDDEN):
         raise TransitionError(f"unknown target state: {target!r}")
 
+    adapter = adapters.get(getattr(skill, "runtime", None))
     text = skill.path.read_text(encoding="utf-8")
     fm = frontmatter.parse(text)
     if not fm.has_fence:
@@ -42,15 +33,11 @@ def set_state(skill: Skill, target: str, *, reason: str = "", actor: str = "qm")
             f"{skill.path} has no frontmatter block to configure"
         )
 
-    previous = derive_state(fm)
+    previous = adapter.derive_state(fm)
     if previous == target:
         return previous
 
-    for key, value in _FLAGS[target].items():
-        if value is None:
-            fm.remove(key)
-        else:
-            fm.set(key, value)
+    adapter.write_state(fm, target)
 
     skill.path.write_text(fm.render(), encoding="utf-8")
     skill.state = target

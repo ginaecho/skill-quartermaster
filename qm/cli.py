@@ -22,10 +22,14 @@ from __future__ import annotations
 import argparse
 import sys
 import time
+from pathlib import Path
 from typing import List, Optional
 
+from . import adapters
+from . import archive as archive_mod
 from . import authoring
 from . import compile as compile_mod
+from . import conflicts as conflicts_mod
 from . import feedback as feedback_mod
 from . import history
 from . import policy, report, store, transitions
@@ -37,22 +41,21 @@ def _load_registry(args) -> Registry:
         skills_dir=getattr(args, "skills_dir", None),
         last_used=store.last_used_map(),
         probation=store.read_probation(),
+        runtime=getattr(args, "runtime", None),
+        include_archived=getattr(args, "all", False),
     )
 
 
 def _skills_root(args, reg: Registry) -> "object":
     """Best-effort target directory for newly authored skills."""
-    import os
     from pathlib import Path
 
     explicit = getattr(args, "skills_dir", None)
     if explicit:
         return Path(explicit)
-    env = os.environ.get("QM_SKILLS_DIR")
-    if env:
-        return Path(env.split(os.pathsep)[0]).expanduser()
-    # Fall back to the project-local skills dir.
-    return Path(".claude/skills")
+    adapter = adapters.get(getattr(args, "runtime", None))
+    roots = adapters.resolve_roots(adapter=adapter)
+    return roots[0] if roots else Path(".quartermaster/skills")
 
 
 def _print(msg: str = "") -> None:
@@ -63,7 +66,47 @@ def _print(msg: str = "") -> None:
 
 def cmd_status(args) -> int:
     reg = _load_registry(args)
-    _print(report.render_status(reg))
+    _print(report.render_status(reg, show_layers=getattr(args, "layers", False)))
+    return 0
+
+
+def cmd_archive(args) -> int:
+    reg = _load_registry(args)
+    sk = reg.get(args.skill)
+    if not sk:
+        _print(f"No skill named {args.skill!r}. Run `qm status` to list skills.")
+        return 2
+    if sk.state == "archived":
+        _print(f"{sk.name} is already archived.")
+        return 0
+    if not args.yes and not _confirm(f"Archive {sk.name}?"):
+        _print("Aborted. Nothing changed.")
+        return 1
+    entry = archive_mod.archive_skill(sk, reason="manual archive")
+    _print(f"{sk.name}: {sk.state} → archived.")
+    _print(f"Archive path: {entry['archive_path']}")
+    _print("Restore with `qm restore {}`.".format(sk.name))
+    return 0
+
+
+def cmd_runtimes(args) -> int:
+    active = adapters.get(getattr(args, "runtime", None)).name
+    _print("Available runtimes:")
+    for adapter in adapters.all_adapters():
+        marker = "*" if adapter.name == active else " "
+        roots = ", ".join(str(p) for p in adapter.default_roots)
+        _print(f"  {marker} {adapter.name:<8} {adapter.description}")
+        _print(f"      roots: {roots}")
+    return 0
+
+
+def cmd_runtime_setup(args) -> int:
+    selected = adapters.all_adapters() if args.all else [adapters.get(args.runtime_name or getattr(args, "runtime", None))]
+    for adapter in selected:
+        paths = adapter.setup(root=args.root)
+        _print(f"{adapter.name}: wrote {len(paths)} path(s)")
+        for path in paths:
+            _print(f"  {path}")
     return 0
 
 
@@ -77,7 +120,7 @@ def cmd_compile(args) -> int:
 
     # Safety: a too-vague intent (e.g. only stop-words) matches nothing and
     # would demote the whole shelf. Refuse rather than nuke the loadout.
-    if len(reg) > 0 and not any(s.score > 0 for s in plan.keep):
+    if len(reg) > 0 and not any(s.score > 0 for s in plan.scored):
         _print(
             f"Intent {intent!r} matched no skills, so this would demote all "
             f"{len(reg)} of them.\nRefusing — give a more specific intent "
@@ -88,13 +131,26 @@ def cmd_compile(args) -> int:
     _print(f"Intent: {intent}")
     _print(f"Loadout cap: {plan.cap}\n")
     _print(f"Keep active ({len(plan.keep)}):")
-    for s in plan.keep:
-        why = ", ".join(s.matched) if s.matched else "(kept to fill loadout)"
-        _print(f"  ● {s.skill.name}  [score {s.score}: {why}]")
+    for layer, items in plan.by_layer.items():
+        if not items:
+            continue
+        _print(f"  [{layer}]")
+        for s in items:
+            why = "; ".join(s.reasons) if s.reasons else "(kept to fill loadout)"
+            _print(f"    ● {s.skill.name}  [score {s.score}, priority {s.priority}: {why}]")
+    if plan.added_guardrails:
+        _print("\nAdded guardrails:")
+        for s in plan.added_guardrails:
+            _print(f"  + {s.skill.name}  [priority {s.priority}]")
+    if plan.blocked:
+        _print("\nBlocked:")
+        for item in plan.blocked:
+            _print(f"  ! {item}")
     if plan.drop:
         _print(f"\nDemote ({len(plan.drop)}):")
         for s in plan.drop:
-            _print(f"  ◐ {s.skill.name}")
+            reason = "cap" if s in plan.dropped_due_cap else "off-intent"
+            _print(f"  ◐ {s.skill.name}  [{reason}, layer {s.layer}, priority {s.priority}]")
 
     if args.dry_run:
         _print("\n(dry run — nothing changed)")
@@ -105,6 +161,7 @@ def cmd_compile(args) -> int:
 
     changed = 0
     for s in plan.keep:
+        store.note_skill_selected(s.skill.name, intent=intent)
         sk = reg.get(s.skill.name)
         if sk and sk.state != ACTIVE:
             transitions.activate(sk, reason="compile: matched intent")
@@ -114,16 +171,21 @@ def cmd_compile(args) -> int:
         if sk and sk.state == ACTIVE:
             transitions.demote(sk, reason="compile: off-intent")
             changed += 1
+    manifest = adapters.get(getattr(args, "runtime", None)).expose_loadout(plan, intent=intent)
+    if manifest:
+        _print(f"\nLoadout manifest: {manifest}")
     _print(f"\nApplied. {changed} transition(s). Run `qm status` to see the loadout.")
     return 0
 
 
 def cmd_review(args) -> int:
+    args.all = True
     reg = _load_registry(args)
     proposals = policy.propose(
         reg,
         demote_after_days=args.demote_after,
         hide_after_days=args.hide_after,
+        archive_after_days=args.archive_after,
     )
     if not proposals:
         _print("No proposals. Your loadout looks well-tuned. ✓")
@@ -147,6 +209,10 @@ def cmd_review(args) -> int:
             continue
         if p.action == "graduate":
             authoring.graduate(p.skill)
+        elif p.action == "archive":
+            archive_mod.archive_skill(sk, reason=f"review: {p.reason}")
+        elif p.action == "restore" and p.from_state == "archived":
+            archive_mod.restore_skill(p.skill, target_root=_skills_root(args, reg))
         else:
             transitions.set_state(sk, p.to_state, reason=f"review: {p.reason}")
         applied += 1
@@ -298,6 +364,14 @@ def _transition_cmd(args, target: str, verb: str) -> int:
 
 
 def cmd_restore(args) -> int:
+    reg = _load_registry(args)
+    if reg.get(args.skill) is None:
+        root = _skills_root(args, reg)
+        restored = archive_mod.restore_skill(args.skill, target_root=root)
+        if restored:
+            _print(f"{args.skill}: archived → active.")
+            _print(f"Restored to {restored}.")
+            return 0
     return _transition_cmd(args, ACTIVE, "restore")
 
 
@@ -317,7 +391,31 @@ def cmd_delete(args) -> int:
     reg = _load_registry(args)
     sk = reg.get(args.skill)
     if not sk:
+        archived = archive_mod.read_index().get(args.skill)
+        if archived:
+            if not args.yes:
+                _print(
+                    f"This will permanently remove archived skill {args.skill} from disk.\n"
+                    f"Re-run with --yes to confirm."
+                )
+                return 1
+            if archive_mod.delete_archived(args.skill):
+                _print(f"Deleted archived skill {args.skill}. Logged to the audit trail.")
+                return 0
         _print(f"No skill named {args.skill!r}.")
+        return 2
+
+    if sk.state == "archived":
+        if not args.yes:
+            _print(
+                f"This will permanently remove archived skill {sk.name} from disk.\n"
+                f"Re-run with --yes to confirm."
+            )
+            return 1
+        if archive_mod.delete_archived(sk.name):
+            _print(f"Deleted archived skill {sk.name}. Logged to the audit trail.")
+            return 0
+        _print(f"No archived copy found for {sk.name!r}.")
         return 2
 
     if sk.state != HIDDEN and not args.force:
@@ -389,6 +487,64 @@ def cmd_log(args) -> int:
     return 0
 
 
+def cmd_history(args) -> int:
+    entries = store.read_skill_history()
+    entry = entries.get(args.skill)
+    if not entry:
+        _print(f"No history for skill {args.skill!r}.")
+        return 2
+
+    _print(f"History for {args.skill}:")
+    for key in (
+        "state",
+        "path",
+        "runtime",
+        "first_seen",
+        "last_seen",
+        "last_used",
+        "usage_count",
+        "selected_count",
+        "demoted_count",
+        "hidden_count",
+        "archive_count",
+        "archive_path",
+    ):
+        value = entry.get(key)
+        if key.endswith("_seen") or key == "last_used":
+            value = _fmt_ts(value)
+        _print(f"  {key}: {value if value not in (None, '') else '-'}")
+
+    metadata = entry.get("metadata") or {}
+    if metadata:
+        _print("  metadata:")
+        for key in ("layer", "priority", "tags", "risk", "provides", "requires", "requires_guardrails", "conflicts_with"):
+            _print(f"    {key}: {metadata.get(key, '-')}")
+
+    intents = entry.get("useful_intents") or []
+    if intents:
+        _print("  useful_intents:")
+        for intent in intents:
+            _print(f"    - {intent}")
+    conflicts = entry.get("conflict_notes") or []
+    if conflicts:
+        _print("  conflict_notes:")
+        for note in conflicts:
+            _print(f"    - {note}")
+    return 0
+
+
+def cmd_conflicts(args) -> int:
+    reg = _load_registry(args)
+    found = conflicts_mod.registry_conflicts(reg)
+    if not found:
+        _print("No conflicts detected.")
+        return 0
+    _print(f"{len(found)} conflict(s):")
+    for c in found:
+        _print(f"  ! {c.left} ↔ {c.right}  — {c.reason}")
+    return 1 if args.strict else 0
+
+
 # --- helpers -------------------------------------------------------------
 
 def _confirm(prompt: str) -> bool:
@@ -399,6 +555,12 @@ def _confirm(prompt: str) -> bool:
     except (EOFError, KeyboardInterrupt):
         return False
     return ans in ("y", "yes")
+
+
+def _fmt_ts(value) -> str:
+    if not isinstance(value, (int, float)):
+        return "-"
+    return time.strftime("%Y-%m-%d %H:%M", time.localtime(value))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -412,9 +574,26 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Directory of skills to manage (overrides QM_SKILLS_DIR).",
     )
+    p.add_argument(
+        "--runtime",
+        choices=adapters.names(),
+        default=None,
+        help="Agent runtime adapter (default: QM_RUNTIME or claude).",
+    )
     sub = p.add_subparsers(dest="command")
 
+    sp = sub.add_parser("runtimes", help="list supported agent runtime adapters")
+    sp.set_defaults(func=cmd_runtimes)
+
+    sp = sub.add_parser("runtime-setup", help="write local setup files for a runtime adapter")
+    sp.add_argument("runtime_name", nargs="?", choices=adapters.names(), help="runtime to set up")
+    sp.add_argument("--all", action="store_true", help="set up every runtime adapter")
+    sp.add_argument("--root", type=Path, default=Path("."), help="workspace root to write setup files into")
+    sp.set_defaults(func=cmd_runtime_setup)
+
     sp = sub.add_parser("status", help="show all skills, states, and token cost")
+    sp.add_argument("--layers", action="store_true", help="show metadata layer and priority")
+    sp.add_argument("--all", action="store_true", help="include archived skills")
     sp.set_defaults(func=cmd_status)
 
     sp = sub.add_parser("compile", help="build an active loadout from a project intent")
@@ -427,6 +606,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("review", help="show & approve proposed transitions")
     sp.add_argument("--demote-after", type=int, default=policy.DEMOTE_AFTER_DAYS)
     sp.add_argument("--hide-after", type=int, default=policy.HIDE_AFTER_DAYS)
+    sp.add_argument("--archive-after", type=int, default=policy.ARCHIVE_AFTER_DAYS)
     sp.add_argument("--yes", action="store_true", help="approve all without prompting")
     sp.add_argument("--dry-run", action="store_true", help="show proposals only")
     sp.set_defaults(func=cmd_review)
@@ -468,6 +648,11 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("skill", help="skill name")
         sp.set_defaults(func=fn)
 
+    sp = sub.add_parser("archive", help="move a hidden/unused skill to reversible archive storage")
+    sp.add_argument("skill", help="skill name")
+    sp.add_argument("--yes", action="store_true", help="archive without prompting")
+    sp.set_defaults(func=cmd_archive)
+
     sp = sub.add_parser("delete", help="human-gated removal from disk")
     sp.add_argument("skill", help="skill name")
     sp.add_argument("--yes", action="store_true", help="confirm the deletion")
@@ -484,6 +669,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("log", help="print the audit trail")
     sp.add_argument("--limit", type=int, default=0, help="show only the last N entries")
     sp.set_defaults(func=cmd_log)
+
+    sp = sub.add_parser("history", help="show historical dictionary entry for a skill")
+    sp.add_argument("skill", help="skill name")
+    sp.set_defaults(func=cmd_history)
+
+    sp = sub.add_parser("conflicts", help="report installed skill conflicts")
+    sp.add_argument("--strict", action="store_true", help="exit non-zero when conflicts are found")
+    sp.set_defaults(func=cmd_conflicts)
 
     return p
 
