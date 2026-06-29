@@ -32,6 +32,7 @@ from . import compile as compile_mod
 from . import conflicts as conflicts_mod
 from . import feedback as feedback_mod
 from . import history
+from . import intake
 from . import policy, report, store, transitions
 from .registry import ACTIVE, DEMOTED, HIDDEN, Registry
 
@@ -545,6 +546,48 @@ def cmd_conflicts(args) -> int:
     return 1 if args.strict else 0
 
 
+def cmd_sources(args) -> int:
+    _print("Curated external skill sources:")
+    for source in intake.curated_sources():
+        _print(f"  {source.name} [{source.trust}]")
+        _print(f"    {source.url}")
+        _print(f"    {source.rationale}")
+    _print("\nClone externally, inspect if desired, then run `qm intake <path> --dry-run`.")
+    return 0
+
+
+def cmd_intake(args) -> int:
+    candidates = intake.scan(args.source)
+    if not candidates:
+        _print(f"No SKILL.md files found under {args.source}.")
+        return 1
+
+    accepted = [c for c in candidates if c.accepted]
+    _print(f"Scanned {len(candidates)} candidate skill(s).")
+    _print(f"Accepted by safety/value gate: {len(accepted)}\n")
+    for c in candidates[: args.limit]:
+        status = "accept" if c.accepted else "reject"
+        risks = ", ".join(c.risk_flags) if c.risk_flags else "-"
+        _print(
+            f"  {status:<6} {c.name:<28} layer={c.layer:<9} "
+            f"value={c.value_score:<2} risks={risks}"
+        )
+
+    if args.dry_run:
+        _print("\n(dry run — nothing imported)")
+        return 0
+    if not args.yes:
+        _print("\nRe-run with --yes to import accepted skills.")
+        return 1
+
+    root = args.import_to or _skills_root(args, Registry([]))
+    copied = intake.import_candidates(candidates, root, limit=args.limit)
+    _print(f"\nImported {len(copied)} skill(s) to {root}:")
+    for path in copied:
+        _print(f"  {path}")
+    return 0
+
+
 # --- helpers -------------------------------------------------------------
 
 def _confirm(prompt: str) -> bool:
@@ -677,6 +720,17 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("conflicts", help="report installed skill conflicts")
     sp.add_argument("--strict", action="store_true", help="exit non-zero when conflicts are found")
     sp.set_defaults(func=cmd_conflicts)
+
+    sp = sub.add_parser("sources", help="list curated external skill source repositories")
+    sp.set_defaults(func=cmd_sources)
+
+    sp = sub.add_parser("intake", help="scan and optionally import safe, high-value external skills")
+    sp.add_argument("source", type=Path, help="local repo/directory to scan")
+    sp.add_argument("--limit", type=int, default=10, help="max candidates to show/import")
+    sp.add_argument("--import-to", type=Path, default=None, help="target skill root for imports")
+    sp.add_argument("--dry-run", action="store_true", help="scan only")
+    sp.add_argument("--yes", action="store_true", help="import accepted skills")
+    sp.set_defaults(func=cmd_intake)
 
     return p
 

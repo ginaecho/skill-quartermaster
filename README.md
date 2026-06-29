@@ -137,6 +137,8 @@ qm archive <skill> --yes # move a skill to reversible archive storage
 qm log                 # print the audit trail of every change
 qm history <skill>     # inspect historical usage/selection metadata
 qm conflicts           # report explicit/inferred skill conflicts
+qm sources             # list curated external skill repos to consider
+qm intake <repo> --dry-run # safely scan a local external skill repo
 qm delete <skill> --yes  # human-gated removal (the only destructive action)
 
 # Authoring arm — turn recurring gaps into new skills
@@ -200,6 +202,23 @@ qm-conflicts-with: unsafe-deploy
 
 All metadata is optional. Existing skills without these keys still load, and
 Quartermaster infers a conservative default layer for status/reporting.
+
+### Trusted external skill intake
+
+Quartermaster can grow your skill shelf from public Git repositories, but it
+does not blindly install them. Clone candidate repos yourself, then scan the
+local checkout:
+
+```bash
+qm sources
+git clone --depth 1 <repo-url> /tmp/skills-source
+qm intake /tmp/skills-source --dry-run
+qm intake /tmp/skills-source --import-to .claude/skills --yes
+```
+
+The intake scanner never executes candidate code. It reads `SKILL.md` files,
+scores high-value skills, flags suspicious install/shell/exfiltration patterns,
+and imports only accepted candidates after explicit `--yes`.
 
 `qm compile` now explains loadouts by layer and writes a runtime loadout
 manifest under `$QM_HOME/loadouts/` when applied, so non-Claude runtimes can

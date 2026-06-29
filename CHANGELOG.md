@@ -44,6 +44,10 @@ in the README.
 - Added Phase 8 evaluation support. `qm.evaluation` and
   `benchmark/layered_eval.py` report guardrail recall, blocked count, conflict
   count, archived count, and context/token metrics for layered loadouts.
+- Added Phase 9 trusted skill intake. `qm sources` lists curated public skill
+  repositories to consider, and `qm intake <local_repo>` scans local checkouts
+  without executing code, rejects suspicious candidates, scores high-value
+  skills, and imports only accepted skills after explicit `--yes`.
 
 ## v0.5 — feedback loop
 

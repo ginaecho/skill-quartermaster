@@ -58,6 +58,9 @@ qm <command>
 - `qm history <skill>` — inspect historical usage, selection, state, and
   metadata for a skill.
 - `qm conflicts` — report explicit and inferred skill conflicts.
+- `qm sources` — list curated external public skill sources to consider.
+- `qm intake <local_repo> --dry-run` — scan a local external skill repo without
+  executing code; `--yes` imports only accepted high-value candidates.
 - `qm log` — print the audit trail of every transition.
 
 ### Authoring arm (the capability-gap loop)
@@ -116,6 +119,9 @@ probationary skills with `◉ prob`.
 9. **Respect guardrails.** If `qm compile` reports a blocked risky skill or a
    guardrail conflict, do not force the action. Explain the missing guardrail or
    conflict and ask the user how to resolve it.
+10. **Treat external repos as untrusted.** Use `qm sources` to suggest candidate
+    repos, ask the user to clone one, run `qm intake <path> --dry-run`, and only
+    import with `--yes` after accepted candidates are reviewed.
 
 ## Notes
 

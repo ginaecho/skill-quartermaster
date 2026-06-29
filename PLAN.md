@@ -162,6 +162,21 @@ Archive behavior:
 Archive is not deletion. It is reversible storage reclamation and context
 cleanup.
 
+### Trusted Skill Intake
+
+Quartermaster should grow the skill shelf from public Git repositories, but
+external repositories are untrusted until screened.
+
+Rules:
+
+- Prefer official or high-signal sources first.
+- Never execute code from a candidate repository during intake.
+- Scan local checkouts only; cloning/downloading remains user-controlled.
+- Reject candidates with suspicious shell/install/exfiltration patterns.
+- Prefer high-value skills: guardrails, tests, reviews, CI, language/framework
+  support, docs, and common project tooling.
+- Import only accepted skills and only after explicit `--yes`.
+
 ## Implementation Phases
 
 ### Phase 0: Runtime Abstraction
@@ -432,6 +447,31 @@ Acceptance criteria:
 - Guardrail skills have high recall even when not directly named.
 - Archive/restore is byte-identical on sampled skills.
 
+### Phase 9: Trusted Skill Intake
+
+Add a safe acquisition path for high-value skills from public Git repositories.
+
+Status: implemented and verified. `qm sources` lists curated candidate repos;
+`qm intake <local_repo> --dry-run` scans local checkouts without executing code,
+scores value, flags suspicious patterns, and `qm intake <local_repo> --yes`
+imports only accepted skills.
+
+Deliverables:
+
+- Curated source list with trust notes.
+- Non-executing scanner for `SKILL.md` candidates.
+- Safety flags for suspicious shell/install/exfiltration patterns.
+- Value scoring for guardrails, testing, review, CI, docs, and common tooling.
+- Explicit import gate with `--yes`.
+- Tests for accept/reject/import behavior.
+
+Acceptance criteria:
+
+- Risky candidate skills are rejected.
+- Safe, high-value skills are accepted.
+- Import copies only accepted skills.
+- Intake is local-only and never runs candidate code.
+
 ## CLI Surface Proposal
 
 New or extended commands:
@@ -448,6 +488,8 @@ qm history <skill>
 qm conflicts
 qm archive <skill>
 qm restore <skill>
+qm sources
+qm intake <local_repo> --dry-run
 ```
 
 Existing commands should continue working with their current meanings.
@@ -480,6 +522,7 @@ Implement one phase at a time:
 7. Archive/restore.
 8. Policy integration.
 9. Benchmarks and docs.
+10. Trusted skill intake.
 
 This order keeps the foundation testable. Runtime abstraction comes first so
 new concepts are implemented once in core logic instead of being baked into a
