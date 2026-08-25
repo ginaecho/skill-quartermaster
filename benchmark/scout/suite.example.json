@@ -1,0 +1,35 @@
+{
+  "id": "code-review",
+  "version": "2026-08-25",
+  "tasks": [
+    {
+      "id": "seeded-null-bug",
+      "prompt": "Review the supplied change for correctness regressions.",
+      "rubric": "Identify the seeded null-handling regression and explain its impact.",
+      "should_invoke": true,
+      "tags": [
+        "correctness",
+        "code-review"
+      ]
+    },
+    {
+      "id": "seeded-auth-bug",
+      "prompt": "Review the supplied authorization change.",
+      "rubric": "Identify the seeded authorization bypass without inventing findings.",
+      "should_invoke": true,
+      "tags": [
+        "security",
+        "code-review"
+      ]
+    },
+    {
+      "id": "write-release-note",
+      "prompt": "Write a concise release note from the supplied facts.",
+      "rubric": "Complete the prose task without invoking a code-review skill.",
+      "should_invoke": false,
+      "tags": [
+        "negative-control"
+      ]
+    }
+  ]
+}

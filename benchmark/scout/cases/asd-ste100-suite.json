@@ -1,0 +1,39 @@
+{
+  "id": "asd-ste100-agent-clarity",
+  "version": "2026-08-25",
+  "tasks": [
+    {
+      "id": "ambiguous-error-modality",
+      "prompt": "Rewrite this error message so an automated agent cannot misread it. Preserve every uncertainty. Return only the rewritten text.\n\nAn error may have occurred while processing your request due to a possible mismatch in the expected data format, which could be caused by an outdated client version.",
+      "rubric": "{\"required_groups\":[[\"request\"],[\"data\",\"format\"],[\"client\",\"version\"]],\"forbidden_terms\":[\"definitely\",\"always\"],\"max_sentence_words\":20,\"no_semicolon\":true,\"output_only\":true,\"minimum_uncertainty_markers\":2}",
+      "should_invoke": true,
+      "tags": [
+        "error-message",
+        "modality",
+        "strict"
+      ]
+    },
+    {
+      "id": "dense-inter-agent-instruction",
+      "prompt": "Rewrite this inter-agent instruction so a downstream agent cannot misread it. Preserve every condition and warning. Return only the rewritten text.\n\nOnce the upstream job has completed and assuming no errors were raised, the downstream agent should proceed to consume the output artifact, though it is worth noting that partial artifacts are sometimes produced under timeout conditions.",
+      "rubric": "{\"required_groups\":[[\"upstream\"],[\"error\",\"errors\"],[\"artifact\"],[\"timeout\"],[\"partial\"]],\"forbidden_terms\":[\"seamless\",\"robust\"],\"max_sentence_words\":20,\"no_semicolon\":true,\"output_only\":true,\"minimum_uncertainty_markers\":1}",
+      "should_invoke": true,
+      "tags": [
+        "inter-agent",
+        "conditions",
+        "strict"
+      ]
+    },
+    {
+      "id": "creative-marketing-control",
+      "prompt": "Write one energetic marketing slogan for a semantic cache named FlashCache. The slogan must mention FlashCache and prompts. Return only the slogan.",
+      "rubric": "{\"required_groups\":[[\"FlashCache\"],[\"prompt\",\"prompts\"]],\"max_sentence_words\":20,\"output_only\":true}",
+      "should_invoke": false,
+      "tags": [
+        "negative-control",
+        "creative",
+        "marketing"
+      ]
+    }
+  ]
+}

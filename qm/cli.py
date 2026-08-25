@@ -20,6 +20,7 @@ forced.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -33,7 +34,7 @@ from . import conflicts as conflicts_mod
 from . import feedback as feedback_mod
 from . import history
 from . import intake
-from . import policy, report, store, transitions
+from . import policy, report, scout, store, transitions
 from .registry import ACTIVE, DEMOTED, HIDDEN, Registry
 
 
@@ -588,6 +589,147 @@ def cmd_intake(args) -> int:
     return 0
 
 
+def cmd_scout_plan(args) -> int:
+    candidate = scout.snapshot_candidate(
+        args.candidate,
+        source=args.source or "",
+        version=args.version,
+    )
+    current = (
+        scout.snapshot_candidate(
+            args.current_skill,
+            source=args.current_source or "",
+            version=args.current_version,
+        )
+        if args.current_skill
+        else None
+    )
+    suite = scout.load_suite(args.suite)
+    plan = scout.build_plan(
+        candidate,
+        suite,
+        current_skill=current,
+        repetitions=args.repetitions,
+        seed=args.seed,
+    )
+    scout.write_json(args.out, plan.as_dict())
+    _print(f"Scout plan: {plan.plan_id}")
+    _print(f"Candidate: {candidate.name}@{candidate.version} ({candidate.content_sha256[:12]})")
+    _print(
+        f"Suite: {suite.suite_id}@{suite.version} · "
+        f"{len(suite.tasks)} tasks · {plan.repetitions} repetitions · "
+        f"{len(plan.jobs)} randomized jobs"
+    )
+    if candidate.risk_flags:
+        _print(f"Warning: candidate has {len(candidate.risk_flags)} static risk flag(s).")
+    if candidate.manifest_warnings:
+        _print(f"Warning: candidate manifest has {len(candidate.manifest_warnings)} missing field(s).")
+    _print(f"Wrote {args.out}")
+    return 0
+
+
+def cmd_scout_run(args) -> int:
+    plan = scout.load_plan(args.plan)
+    runner = [args.runner] + list(args.runner_arg)
+    existing = ()
+    retry_ids = None
+    if args.resume and args.out.exists():
+        existing = scout.load_trials(args.out)
+        retry_ids = {
+            trial.job_id
+            for trial in existing
+            if trial.error or not trial.success
+        }
+        planned_ids = {job.job_id for job in plan.jobs}
+        retry_ids.update(planned_ids - {trial.job_id for trial in existing})
+        _print(f"Resuming {len(retry_ids)} incomplete or failed job(s).")
+    replacements = scout.run_plan(
+        plan,
+        runner,
+        timeout_seconds=args.timeout,
+        job_ids=retry_ids,
+    )
+    trials = scout.merge_trials(plan, existing, replacements) if args.resume else replacements
+    scout.write_trials(args.out, trials)
+    failed = sum(bool(trial.error) for trial in trials)
+    _print(f"Executed {len(trials)} scout job(s); {failed} runner error(s).")
+    _print(f"Wrote {args.out}")
+    return 1 if failed else 0
+
+
+def cmd_scout_report(args) -> int:
+    plan = scout.load_plan(args.plan)
+    trials = scout.load_trials(args.trials)
+    evidence = scout.build_evidence(plan, trials)
+    scout.write_json(args.out, evidence.as_dict())
+    scout.write_json(args.review_out, evidence.review_packet())
+    _print(f"Evidence: {evidence.evidence_id}")
+    _print(f"Candidate ranking score: {evidence.ranking_score:.3f}")
+    for comparison in evidence.comparisons:
+        _print(
+            f"  {comparison.candidate_mode} vs {comparison.baseline}/{comparison.baseline_mode}: "
+            f"quality delta {comparison.quality_delta:+.3f} "
+            f"(95% CI {comparison.quality_ci95_low:+.3f}..{comparison.quality_ci95_high:+.3f})"
+        )
+    _print(f"Automated recommendation: {evidence.automated_recommendation}")
+    for reason in evidence.recommendation_reasons:
+        _print(f"  ! {reason}")
+    _print(f"Wrote internal evidence to {args.out}")
+    _print(f"Wrote blinded review packet to {args.review_out}")
+    return 0
+
+
+def cmd_scout_review(args) -> int:
+    evidence = json.loads(args.evidence.read_text(encoding="utf-8"))
+    try:
+        scout.verify_evidence_dict(evidence)
+    except scout.ScoutError as exc:
+        _print(f"Invalid evidence: {exc}")
+        return 2
+    raw_votes = json.loads(args.votes.read_text(encoding="utf-8"))
+    if not isinstance(raw_votes, list):
+        _print("Votes file must contain a JSON array.")
+        return 2
+    votes = [
+        scout.ReviewVote(
+            evidence_id=str(vote.get("evidence_id", "")),
+            reviewer=str(vote.get("reviewer", "")),
+            decision=str(vote.get("decision", "")),
+            rationale=str(vote.get("rationale", "")),
+            safety_veto=vote.get("safety_veto", False),
+        )
+        for vote in raw_votes
+    ]
+    if any(not isinstance(vote.safety_veto, bool) for vote in votes):
+        _print("Every safety_veto value must be a JSON boolean.")
+        return 2
+    author = args.author or str(evidence.get("candidate", {}).get("author", ""))
+    if not author:
+        _print("Candidate author is required in the manifest or via --author.")
+        return 2
+    decision = scout.decide_review(
+        votes,
+        evidence_id=str(evidence["evidence_id"]),
+        author=author,
+    )
+    payload = {
+        "schema_version": 1,
+        "evidence_id": evidence.get("evidence_id"),
+        "candidate": evidence.get("candidate", {}),
+        "decision": decision.as_dict(),
+        "votes": raw_votes,
+    }
+    scout.write_json(args.out, payload)
+    _print(f"Review decision: {decision.status}")
+    _print(
+        f"Votes: {decision.accept_count} accept · {decision.reject_count} reject · "
+        f"{decision.revise_count} revise · {decision.safety_vetoes} safety veto"
+    )
+    _print("Decision is evidence only; apply any lifecycle change through Quartermaster review.")
+    _print(f"Wrote {args.out}")
+    return 0 if decision.status == "approved" else 1
+
+
 # --- helpers -------------------------------------------------------------
 
 def _confirm(prompt: str) -> bool:
@@ -731,6 +873,50 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--dry-run", action="store_true", help="scan only")
     sp.add_argument("--yes", action="store_true", help="import accepted skills")
     sp.set_defaults(func=cmd_intake)
+
+    sp = sub.add_parser("scout", help="run reproducible A/B evidence scouting for candidate skills")
+    scout_sub = sp.add_subparsers(dest="scout_command", required=True)
+
+    scout_plan = scout_sub.add_parser("plan", help="pin skills and create randomized paired jobs")
+    scout_plan.add_argument("candidate", type=Path, help="candidate skill directory or SKILL.md")
+    scout_plan.add_argument("--suite", type=Path, required=True, help="versioned benchmark suite JSON")
+    scout_plan.add_argument("--current-skill", type=Path, default=None, help="current default skill baseline")
+    scout_plan.add_argument("--source", default="", help="candidate source URL or repository identity")
+    scout_plan.add_argument("--version", default="latest", help="candidate source version or commit")
+    scout_plan.add_argument("--current-source", default="", help="current skill source identity")
+    scout_plan.add_argument("--current-version", default="latest", help="current skill version or commit")
+    scout_plan.add_argument("--repetitions", type=int, default=5, help="paired repetitions per task")
+    scout_plan.add_argument("--seed", type=int, default=7, help="randomization seed")
+    scout_plan.add_argument("--out", type=Path, default=Path("scout-plan.json"))
+    scout_plan.set_defaults(func=cmd_scout_plan)
+
+    scout_run = scout_sub.add_parser("run", help="execute jobs through an isolated JSON runner")
+    scout_run.add_argument("plan", type=Path, help="scout plan JSON")
+    scout_run.add_argument("--out", type=Path, default=Path("scout-trials.jsonl"))
+    scout_run.add_argument("--timeout", type=float, default=600.0, help="timeout per job in seconds")
+    scout_run.add_argument("--resume", action="store_true", help="rerun only missing or failed output rows")
+    scout_run.add_argument("--runner", required=True, help="isolated runner executable")
+    scout_run.add_argument(
+        "--runner-arg",
+        action="append",
+        default=[],
+        help="runner argument; repeat, using --runner-arg=-x for option-like values",
+    )
+    scout_run.set_defaults(func=cmd_scout_run)
+
+    scout_report = scout_sub.add_parser("report", help="aggregate trials into evidence and review packets")
+    scout_report.add_argument("plan", type=Path, help="scout plan JSON")
+    scout_report.add_argument("trials", type=Path, help="runner trial JSON or JSONL")
+    scout_report.add_argument("--out", type=Path, default=Path("scout-evidence.json"))
+    scout_report.add_argument("--review-out", type=Path, default=Path("scout-review-packet.json"))
+    scout_report.set_defaults(func=cmd_scout_report)
+
+    scout_review = scout_sub.add_parser("review", help="resolve three independent reviewer votes")
+    scout_review.add_argument("evidence", type=Path, help="internal evidence JSON")
+    scout_review.add_argument("votes", type=Path, help="JSON array of reviewer votes")
+    scout_review.add_argument("--author", default="", help="candidate author identity to exclude")
+    scout_review.add_argument("--out", type=Path, default=Path("scout-decision.json"))
+    scout_review.set_defaults(func=cmd_scout_review)
 
     return p
 

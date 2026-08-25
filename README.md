@@ -141,6 +141,13 @@ qm sources             # list curated external skill repos to consider
 qm intake <repo> --dry-run # safely scan a local external skill repo
 qm delete <skill> --yes  # human-gated removal (the only destructive action)
 
+# Skill Scout — comparative evidence before approval
+qm scout plan <candidate> --suite benchmark/scout/suite.example.json \
+  --current-skill <current-default> --source <repo-url> --version <commit>
+qm scout run scout-plan.json --runner python --runner-arg path/to/isolated_runner.py
+qm scout report scout-plan.json scout-trials.jsonl
+qm scout review scout-evidence.json reviewer-votes.json --author <owner>
+
 # Authoring arm — turn recurring gaps into new skills
 qm gap "<need>"        # record a capability gap (a need with no matching skill)
 qm gaps                # cluster gaps; recommend new skills to author
@@ -153,6 +160,28 @@ qm revert              # undo the last automatic change (one-click revert)
 ```
 
 > Quartermaster only ever *toggles states* and *proposes* changes. It will not remove a skill from disk unless you explicitly confirm with `--yes`.
+
+### Skill Scout
+
+Skill Scout compares a proposed skill against both no-skill behavior and the
+current default before people approve it. Plans pin the candidate content hash,
+randomize repeated paired jobs, and measure both **forced efficacy** and
+**natural invocation**. Reports preserve quality, completion, selection
+accuracy, reliability, time, tokens, cost, safety findings, confidence
+intervals, and known limitations instead of hiding trade-offs in one score.
+
+Execution crosses a JSON stdin/stdout runner seam. This keeps Quartermaster
+provider-neutral while an organization runs Copilot, Claude, Codex, or another
+subscription agent in its own ephemeral least-privilege worker. Scout re-hashes
+skill content before execution and rejects plans whose pinned inputs changed.
+
+The blinded packet is scored independently by three reviewers. Two accepts
+produce an `approved` evidence decision; any substantiated safety veto blocks
+it. Scout never activates, archives, or deletes a skill itself—the resulting
+decision goes through Quartermaster's existing lifecycle review.
+
+See [`docs/SCOUTING.md`](./docs/SCOUTING.md) for schemas, runner integration,
+the full workflow, and trust boundaries.
 
 ### Try it without installing
 

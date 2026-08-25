@@ -102,7 +102,7 @@ def scan(root: Path) -> List[IntakeCandidate]:
                 description=description,
                 layer=meta.layer,
                 value_score=_value_score(name, description, meta),
-                risk_flags=_risk_flags(text),
+                risk_flags=risk_flags(text),
             )
         )
     candidates.sort(key=lambda c: (-int(c.accepted), -c.value_score, c.name.lower()))
@@ -126,7 +126,8 @@ def import_candidates(candidates: Iterable[IntakeCandidate], target_root: Path, 
     return copied
 
 
-def _risk_flags(text: str) -> List[str]:
+def risk_flags(text: str) -> List[str]:
+    """Return static risk indicators without executing candidate content."""
     low = text.lower()
     flags = []
     for pattern in SUSPICIOUS_PATTERNS:

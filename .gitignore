@@ -9,3 +9,5 @@ dist/
 venv/
 # Quartermaster local state (never commit usage/audit logs)
 .quartermaster/
+# Local Scout plans, raw model outputs, and reviewer packets
+runs/
