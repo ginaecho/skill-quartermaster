@@ -15,7 +15,9 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/a-kinder-way.svg" alt="A scout finds promising skills, a fair arena trials them head-to-head, evidence grows in an append-only log, three humans review, and trust is earned: candidate, scouted, verified." width="100%">
+  <a href="docs/assets/skill-story-animation.mp4">
+    <img src="docs/assets/skill-story-animation.gif" alt="Animated story: a scout finds promising skills, intake scans them without running code, a fair arena trials them head-to-head, evidence grows in an append-only log, three humans review, and trust is earned: candidate, scouted, verified. Click for the video." width="100%">
+  </a>
 </p>
 
 ## Why
