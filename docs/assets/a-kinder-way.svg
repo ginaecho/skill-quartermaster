@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" font-family="'Segoe Print','Bradley Hand','Comic Sans MS','Patrick Hand',cursive" role="img" aria-label="A kinder way to choose agent skills: fair trials, visible proof, human care">
+  <defs>
+    <marker id="karr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#1e2a44"/>
+    </marker>
+  </defs>
+  <rect width="1600" height="1000" fill="#fbfaf3"/>
+
+  <!-- title -->
+  <text x="80" y="78" font-size="48" font-weight="bold" fill="#1e2a44">A kinder way to choose agent skills</text>
+  <text x="82" y="118" font-size="24" font-style="italic" fill="#8a94ab">Not a popularity contest &#8212; a trail of fair trials, visible proof, and human care.</text>
+
+  <!-- gentle horizon lines -->
+  <path d="M60 160 q380 -28 760 -6 t720 -12" fill="none" stroke="#d9dce6" stroke-width="2"/>
+  <path d="M60 782 q420 30 780 8 t700 -6" fill="none" stroke="#d9dce6" stroke-width="2"/>
+
+  <!-- Seeds we borrow -->
+  <g transform="rotate(-2 240 300)">
+    <rect x="78" y="188" width="322" height="216" rx="10" fill="#fffef8" stroke="#1e2a44" stroke-width="4"/>
+    <text x="104" y="238" font-size="27" font-weight="bold" fill="#1e2a44">Seeds we borrow</text>
+    <text x="104" y="272" font-size="19" fill="#3d4a66">MCP &#183; Agent Skills &#183; npm</text>
+    <text x="104" y="298" font-size="19" fill="#3d4a66">PyPI &#183; VS Code &#183; OpenAI</text>
+    <path d="M104 316 q120 10 258 -2" fill="none" stroke="#1e2a44" stroke-width="2"/>
+    <text x="104" y="352" font-size="17" fill="#54607c">versioning &#183; provenance &#183; trust</text>
+    <text x="104" y="376" font-size="17" fill="#54607c">discovery &#183; deprecation &#183; pinning</text>
+  </g>
+  <path d="M414 268 q68 -18 128 6" fill="none" stroke="#1e2a44" stroke-width="4.5" stroke-dasharray="12 10" marker-end="url(#karr)"/>
+
+  <!-- the scout -->
+  <g stroke="#1e2a44" stroke-width="4" fill="none">
+    <circle cx="614" cy="290" r="76" fill="#fbfaf3"/>
+    <path d="M544 260 q56 -46 132 -14" stroke-width="5"/>
+    <circle cx="590" cy="292" r="4.5" fill="#1e2a44" stroke="none"/>
+    <circle cx="634" cy="292" r="4.5" fill="#1e2a44" stroke="none"/>
+    <path d="M586 320 q28 20 56 0"/>
+    <circle cx="668" cy="318" r="26" fill="none"/>
+    <line x1="686" y1="337" x2="704" y2="356"/>
+    <line x1="614" y1="366" x2="614" y2="470"/>
+    <line x1="614" y1="398" x2="556" y2="446"/>
+    <line x1="614" y1="398" x2="672" y2="446"/>
+    <line x1="614" y1="470" x2="566" y2="532"/>
+    <line x1="614" y1="470" x2="662" y2="532"/>
+  </g>
+  <text x="614" y="565" font-size="25" font-weight="bold" fill="#1e2a44" text-anchor="middle">the scout</text>
+  <text x="614" y="592" font-size="19" fill="#54607c" text-anchor="middle">finds promising matches</text>
+  <path d="M706 258 q84 -34 168 -14" fill="none" stroke="#1e2a44" stroke-width="4.5" stroke-dasharray="12 10" marker-end="url(#karr)"/>
+
+  <!-- A fair little arena -->
+  <g>
+    <rect x="892" y="188" width="392" height="232" rx="10" fill="#fffef8" stroke="#1e2a44" stroke-width="4"/>
+    <text x="1088" y="234" font-size="27" font-weight="bold" fill="#1e2a44" text-anchor="middle">A fair little arena</text>
+    <text x="1088" y="264" font-size="18" fill="#54607c" text-anchor="middle">same task &#183; same seed &#183; pinned versions</text>
+    <g stroke="#1e2a44" stroke-width="3.5" fill="#fff">
+      <rect x="930" y="288" width="118" height="70" rx="18"/>
+      <circle cx="970" cy="314" r="4" fill="#1e2a44"/><circle cx="1008" cy="314" r="4" fill="#1e2a44"/>
+      <path d="M968 332 q21 13 42 0" fill="none"/>
+      <rect x="1128" y="288" width="118" height="70" rx="18"/>
+      <circle cx="1168" cy="314" r="4" fill="#1e2a44"/><circle cx="1206" cy="314" r="4" fill="#1e2a44"/>
+      <path d="M1166 332 q21 13 42 0" fill="none"/>
+    </g>
+    <text x="1088" y="331" font-size="22" font-weight="bold" fill="#1e2a44" text-anchor="middle">vs.</text>
+    <text x="989" y="394" font-size="18" fill="#54607c" text-anchor="middle">Skill A</text>
+    <text x="1187" y="394" font-size="18" fill="#54607c" text-anchor="middle">Skill B</text>
+  </g>
+
+  <!-- arena to evidence + tea -->
+  <path d="M1010 420 q-40 96 -128 172" fill="none" stroke="#1e2a44" stroke-width="5" marker-end="url(#karr)"/>
+  <path d="M1166 420 q40 90 44 160" fill="none" stroke="#1e2a44" stroke-width="5" marker-end="url(#karr)"/>
+
+  <!-- Earned, not assumed -->
+  <text x="86" y="560" font-size="27" font-weight="bold" fill="#1e2a44">Earned, not assumed</text>
+  <g stroke="#1e2a44" stroke-width="3.5" fill="#fffef8">
+    <rect x="92" y="592" width="180" height="56" rx="6" transform="rotate(-1.4 182 620)"/>
+    <rect x="110" y="666" width="180" height="56" rx="6" transform="rotate(1.2 200 694)"/>
+    <rect x="128" y="740" width="180" height="56" rx="6" transform="rotate(-1 218 768)"/>
+  </g>
+  <text x="182" y="628" font-size="21" fill="#1e2a44" text-anchor="middle" transform="rotate(-1.4 182 620)">Candidate</text>
+  <text x="200" y="702" font-size="21" fill="#1e2a44" text-anchor="middle" transform="rotate(1.2 200 694)">Scouted</text>
+  <text x="218" y="776" font-size="21" fill="#1e2a44" text-anchor="middle" transform="rotate(-1 218 768)">Verified</text>
+
+  <!-- scout drops evidence -->
+  <g stroke="#8a94ab" stroke-width="2" fill="none">
+    <line x1="600" y1="560" x2="622" y2="646"/>
+    <line x1="620" y1="560" x2="648" y2="646"/>
+  </g>
+
+  <!-- Evidence grows here -->
+  <g>
+    <rect x="474" y="648" width="336" height="218" rx="10" fill="#fffef8" stroke="#1e2a44" stroke-width="4" transform="rotate(-0.8 642 757)"/>
+    <text x="642" y="698" font-size="26" font-weight="bold" fill="#1e2a44" text-anchor="middle">Evidence grows here</text>
+    <text x="642" y="728" font-size="18" fill="#54607c" text-anchor="middle">pass/fail &#183; latency &#183; cost &#183; notes</text>
+    <g stroke="#1e2a44" stroke-width="3" fill="none">
+      <path d="M548 800 q22 -34 44 0"/>
+      <path d="M596 802 q26 -44 52 0"/>
+      <path d="M652 800 q22 -30 44 0"/>
+      <circle cx="570" cy="758" r="10"/>
+      <circle cx="622" cy="750" r="12"/>
+      <circle cx="674" cy="760" r="10"/>
+    </g>
+    <text x="642" y="840" font-size="17" fill="#54607c" text-anchor="middle">append-only: we keep the whole story</text>
+  </g>
+  <path d="M816 748 q40 -6 74 4" fill="none" stroke="#1e2a44" stroke-width="4.5" stroke-dasharray="12 10" marker-end="url(#karr)"/>
+
+  <!-- Three humans have tea -->
+  <g>
+    <rect x="900" y="616" width="408" height="248" rx="10" fill="#fffef8" stroke="#1e2a44" stroke-width="4" transform="rotate(0.7 1104 740)"/>
+    <text x="1104" y="670" font-size="27" font-weight="bold" fill="#1e2a44" text-anchor="middle">Three humans have tea</text>
+    <text x="1104" y="700" font-size="18" fill="#54607c" text-anchor="middle">independent first, together after</text>
+    <g stroke="#1e2a44" stroke-width="3.5" fill="#fff">
+      <circle cx="1000" cy="768" r="34"/><circle cx="1104" cy="768" r="34"/><circle cx="1208" cy="768" r="34"/>
+    </g>
+    <g fill="#1e2a44">
+      <circle cx="988" cy="760" r="3.6"/><circle cx="1012" cy="760" r="3.6"/>
+      <circle cx="1092" cy="760" r="3.6"/><circle cx="1116" cy="760" r="3.6"/>
+      <circle cx="1196" cy="760" r="3.6"/><circle cx="1220" cy="760" r="3.6"/>
+    </g>
+    <g stroke="#1e2a44" stroke-width="3" fill="none">
+      <path d="M988 778 q12 9 24 0"/><path d="M1092 778 q12 9 24 0"/><path d="M1196 778 q12 9 24 0"/>
+    </g>
+    <text x="1000" y="832" font-size="17" fill="#54607c" text-anchor="middle">accept</text>
+    <text x="1104" y="832" font-size="17" fill="#54607c" text-anchor="middle">revise</text>
+    <text x="1208" y="832" font-size="17" fill="#54607c" text-anchor="middle">reject</text>
+  </g>
+
+  <!-- rainbow -->
+  <g fill="none" stroke-linecap="round" stroke-width="22">
+    <path d="M1348 792 a132 132 0 0 1 244 0" stroke="#f2907e"/>
+    <path d="M1376 792 a104 104 0 0 1 188 0" stroke="#f6c360"/>
+    <path d="M1404 792 a76 76 0 0 1 132 0" stroke="#79c893"/>
+    <path d="M1432 792 a48 48 0 0 1 76 0" stroke="#7fb2e8"/>
+  </g>
+  <text x="1470" y="838" font-size="26" font-weight="bold" fill="#1e2a44" text-anchor="middle">care over time</text>
+  <text x="1470" y="866" font-size="16.5" fill="#54607c" text-anchor="middle">active &#8594; deprecated &#8594; archived</text>
+
+  <!-- promise -->
+  <text x="86" y="938" font-size="21" fill="#1e2a44">&#9829; The promise: every production skill is explainable, reproducible, and cared for.</text>
+  <path d="M84 956 q330 8 706 -2" fill="none" stroke="#1e2a44" stroke-width="2.5"/>
+</svg>

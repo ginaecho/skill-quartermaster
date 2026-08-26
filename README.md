@@ -1,9 +1,10 @@
 <h1 align="center">🎖️ Quartermaster</h1>
 
 <p align="center">
-  <strong>A non-destructive skill manager for coding agents.</strong><br>
-  Compiles the right skill <em>loadout</em> for your project, then quietly demotes and hides the skills you aren't using —<br>
-  so your context window stays lean and your skill set stays relevant. <strong>Nothing is ever deleted without your yes.</strong>
+  <strong>A kinder way to choose agent skills.</strong><br>
+  Skills are the how-to guides your coding agent loads. Quartermaster picks the small set your project
+  actually needs, proves new ones are worth it with fair side-by-side trials,<br>
+  and leaves every final decision to a human. <strong>It never deletes anything without your yes.</strong>
 </p>
 
 <p align="center">
@@ -13,18 +14,117 @@
   <a href="https://doi.org/10.5281/zenodo.21009805"><img alt="DOI" src="https://zenodo.org/badge/DOI/10.5281/zenodo.21009805.svg"></a>
 </p>
 
+<p align="center">
+  <img src="docs/assets/a-kinder-way.svg" alt="A kinder way to choose agent skills: a scout finds promising matches from public skill registries, a fair arena runs Skill A against Skill B on the same task, evidence grows in an append-only log, three humans review independently, and trust is earned step by step — candidate, scouted, verified — with care over the skill's whole life." width="100%">
+</p>
+
 ---
 
-## The problem
+## The problem, in plain words
 
-Mega-marketplaces ship hundreds of skills in one install. Two pains follow:
+Skill marketplaces ship hundreds of skills in one install. That hurts twice:
 
-- **Context cost & noise.** A large installed set clutters the model's selection space and degrades tool-selection accuracy past a few dozen skills.
-- **Curation burden.** There isn't even a clean "turn this one off" — the common workaround is renaming `SKILL.md` to `_SKILL.md` so the parser misses it.
+- **Your agent gets worse.** Every installed skill takes up context space, and past a few dozen the model starts picking the wrong one.
+- **You become the janitor.** Which skills are safe? Which new one is actually better than what you have? There isn't even a clean "off switch" — people rename `SKILL.md` to `_SKILL.md` just to hide one.
 
-People avoid cleanup tools out of one fear: **"what if it deletes the wrong thing?"** Quartermaster is built so that can't happen.
+And nobody trusts a cleanup tool, because of one fear: *what if it deletes the wrong thing?*
 
-## What it does
+## What Quartermaster believes
+
+Not a popularity contest — a trail of fair trials, visible proof, and human care.
+
+1. **Trust is earned, not assumed.** A new skill starts as a *candidate*. It becomes trusted only by winning fair trials (*scouted*) and passing human review (*verified*). No skill jumps the queue.
+2. **Fair trials, not stars.** To judge a skill, run it head-to-head against your current one — same task, same seed, pinned versions — and measure what happens.
+3. **Evidence is append-only.** Results (pass/fail, latency, tokens, cost, notes) are recorded and never rewritten. You keep the whole story, including the trade-offs.
+4. **Humans have the last word.** Three reviewers score the evidence blind and independently. The tool proposes; people decide. Every action is audited and reversible.
+
+## How it works
+
+The full path a skill travels, from first hello to trusted teammate:
+
+<p align="center">
+  <img src="docs/assets/from-hello-to-trusted-teammate.svg" alt="Pipeline in three bands. Intake and trust: registration, safety gate, registry, discovery index. Scouting engine: task matcher, sandboxed A/B arena, evidence log, dossier. Human control: blind three-reviewer quorum, decision policy, lifecycle controller moving skills from candidate to scouted to verified. Fresh evidence and revised versions return for another fair scouting cycle." width="100%">
+</p>
+
+### 1 · Intake & trust — no skill jumps the queue
+
+New skills come from public repos (`qm sources` lists curated ones). You clone a repo yourself, then Quartermaster **scans it without ever running its code**: it reads each `SKILL.md`, records name, description, and a content hash, and flags suspicious install/shell/data-exfiltration patterns. Only skills you accept with an explicit `--yes` are imported. Everything on your shelf lives in a registry (`qm status`) with its state, usage history, and full audit trail; `qm conflicts` warns when skills overlap or clash.
+
+### 2 · Scouting engine — a fair little arena
+
+Before anyone approves a candidate, Scout runs the trial. A **plan** pins the exact content hash and version of the candidate *and* your current default, then lays out randomized, repeated, paired jobs from a versioned task suite. Execution goes through a simple JSON stdin/stdout seam, so the actual model runs inside **your own sandboxed worker** — Copilot, Claude, Codex, whatever you use. If the pinned content changed since planning, Scout refuses to run. Trials land in an **append-only log**; the report aggregates them into a dossier with quality deltas, confidence intervals, cost, and known limitations — never one flattering score.
+
+### 3 · Human control — three humans have tea
+
+The dossier is **blinded** (no skill names) and scored by three reviewers, independently, with the candidate's author excluded. Two accepts approve; any substantiated safety veto blocks. Even then, Scout only produces a *decision file* — the actual lifecycle change (activate, demote, archive) goes through Quartermaster's normal human-gated review, and `qm revert` can walk any automatic change back. Deletion is the one destructive act, and it never happens without your explicit confirmation.
+
+> The figures show the north star; a few pieces (prompt-injection scanning, OIDC provenance, semantic discovery) are still on the [roadmap](#roadmap). Everything invoked in **How to run** below works today.
+
+## How to run
+
+### Install as a Claude Code plugin
+
+```bash
+/plugin marketplace add ginaecho/skill-quartermaster
+/plugin install quartermaster@skill-quartermaster
+```
+
+You get the `quartermaster` skill, 14 slash commands (`/qm-status`, `/qm-compile`, `/qm-review`, …), and the `qm` CLI.
+
+### Or run with zero install
+
+The CLI is pure Python, standard library only — nothing to `pip install`:
+
+```bash
+export QM_SKILLS_DIR=~/.claude/skills   # or your project's .claude/skills
+python3 bin/qm status
+```
+
+### Daily loop — keep context lean
+
+```bash
+qm status              # every skill: state, last used, token cost
+qm compile "<intent>"  # pick the ~30 skills this project needs (the "loadout")
+qm review              # approve proposed demotions/promotions
+qm restore <skill>     # bring anything back — one command
+qm revert              # undo the last automatic change
+qm log                 # audit trail of every change
+```
+
+### Bring in new skills — intake, then scout
+
+```bash
+# Intake: scan before you trust (never executes candidate code)
+qm sources
+git clone --depth 1 <repo-url> /tmp/skills-source
+qm intake /tmp/skills-source --dry-run
+qm intake /tmp/skills-source --import-to .claude/skills --yes
+
+# Scout: fair A/B trial of a candidate vs. your current default
+qm scout plan <candidate> --suite benchmark/scout/suite.example.json \
+  --current-skill <current-default> --source <repo-url> --version <commit>
+qm scout run scout-plan.json --runner python --runner-arg path/to/isolated_runner.py
+qm scout report scout-plan.json scout-trials.jsonl     # dossier + blinded packet
+qm scout review scout-evidence.json reviewer-votes.json --author <owner>
+```
+
+A ready-made Copilot runner and a worked case study live in [`benchmark/scout/`](./benchmark/scout/); schemas and trust boundaries in [`docs/SCOUTING.md`](./docs/SCOUTING.md).
+
+### Care over time
+
+```bash
+qm demote <skill>        # out of auto-selection, still yours to invoke
+qm hide <skill>          # out of context entirely, still on disk
+qm archive <skill> --yes # reversible cold storage
+qm delete <skill> --yes  # the only destructive action — always asks
+qm gap "<need>"          # note a missing capability; qm gaps clusters them
+qm author <name>         # scaffold a new skill on probation; qm graduate promotes it
+qm feedback "<gripe>"    # plain-language complaint → the right lever
+```
+
+Local state (usage telemetry, audit log, skill history) lives in `~/.quartermaster/` (override with `QM_HOME`). **Nothing ever leaves your machine.** Run the tests with `python3 -m pytest` — 128 tests.
+
+## Does it work? The numbers
 
 Measured on **851 real open-source skills** (Anthropic + community hubs):
 
@@ -34,21 +134,16 @@ Measured on **851 real open-source skills** (Anthropic + community hubs):
 
 | Claim | Evidence |
 |---|---|
-| Cuts the selection set | **851 → 30** skills (28×, at the ~30 accuracy sweet spot) |
-| Saves context | **~59.7k → ~2.2k** tokens (~57.5k saved, **96%**) |
+| Smaller choice for the model | **851 → 30** skills (at the ~30 accuracy sweet spot) |
+| Cheaper context | **~59.7k → ~2.2k** tokens (**96%** saved) |
 | Never deletes | **851 → 851** files on disk, **0** deleted |
 | Fully reversible | demote→restore **byte-identical on 200/200** sampled skills |
-| Usage-driven | flags **809** stale skills to demote, then **737** to hide |
-| **Keeps what the task needs** | **100% recall** of needed skills at cap=30 (vs 3.5% random) |
-| **Doesn't hurt the agent** | live A/B (`claude-opus-4-8`, 60 tasks): loadout **97%** vs full set **93%** — **+3 pts** |
+| Keeps what the task needs | **100% recall** of needed skills at cap 30 (vs 3.5% random) |
+| Doesn't hurt the agent | live A/B (`claude-opus-4-8`, 60 tasks): loadout **97%** vs full set **93%** |
 
-That last row is the one that matters: trimming to ~30 skills **improved** selection accuracy over the full 840-skill menu, at a fraction of the context cost.
-
-Full reports — [`BENCHMARK.md`](./BENCHMARK.md) (savings), [`PERFORMANCE.md`](./PERFORMANCE.md) (capability retention), [`benchmark/ab_eval/`](./benchmark/ab_eval/) (live A/B, provider-agnostic). All reproducible from [`benchmark/`](./benchmark/).
+That last row is the point: with ~30 skills instead of 840, the agent picked the right skill *more* often — at a fraction of the cost. Full reports: [`BENCHMARK.md`](./BENCHMARK.md), [`PERFORMANCE.md`](./PERFORMANCE.md), [`benchmark/ab_eval/`](./benchmark/ab_eval/) (reproducible, provider-agnostic).
 
 ## The state ladder
-
-Quartermaster manages the **lifecycle** of skills, not their content:
 
 | State | In context? | Auto-loadable? | You can invoke? | On disk? |
 |---|:---:|:---:|:---:|:---:|
@@ -58,121 +153,17 @@ Quartermaster manages the **lifecycle** of skills, not their content:
 | **archived** | ❌ | ❌ | ❌ | ✅ *(outside active roots)* |
 | **deleted** | ❌ | — | — | ❌ *(only after you approve)* |
 
-Every transition is **logged and reversible**. Demote and hide happen automatically; **delete never does**.
-
-## Quick start
-
-```bash
-/plugin marketplace add ginaecho/skill-quartermaster
-/plugin install quartermaster@skill-quartermaster
-```
-
-You get the `quartermaster` skill, 14 slash commands (`/qm-status`, `/qm-compile`, `/qm-review`, `/qm-restore`, …), and the `qm` CLI.
-
-**Or run it with zero install** — the CLI is pure-Python, stdlib only:
-
-```bash
-export QM_SKILLS_DIR=~/.claude/skills   # or your project's .claude/skills
-python3 bin/qm status
-```
-
-### Commands
-
-```bash
-# Core lifecycle
-qm status              # every skill, its state, last-used, token cost
-qm compile "<intent>"  # build an active loadout for this project
-qm review              # approve proposed demotions/promotions
-qm restore <skill>     # bring anything back from demoted/hidden
-qm demote / hide / archive <skill>    # non-destructive state changes
-qm delete <skill> --yes               # the only destructive action
-
-# Insight & undo
-qm log                 # audit trail of every change
-qm history <skill>     # historical usage/selection metadata
-qm conflicts           # explicit/inferred skill conflicts
-qm revert              # undo the last automatic change
-qm feedback "<gripe>"  # route a complaint to the right lever
-
-# Growing the shelf
-qm sources             # curated external skill repos
-qm intake <repo> --dry-run            # scan a checkout (never executes candidate code)
-qm gap "<need>" / qm gaps             # record & cluster capability gaps
-qm author <name>       # scaffold a probationary skill
-qm graduate <skill>    # end probation once proven useful
-
-# Runtimes
-qm runtimes            # list adapters (claude, codex, copilot, vscode, generic)
-qm runtime-setup codex # write local setup files
-```
-
-> Quartermaster only *toggles states* and *proposes* changes. It will not remove a skill from disk without an explicit `--yes`.
-
-## Skill Scout — evidence before approval
-
-Don't guess whether a new skill is worth installing. Scout compares a candidate against **both** no-skill behavior and your current default, then produces a reviewable evidence packet.
-
-```bash
-qm scout plan <candidate> --suite benchmark/scout/suite.example.json \
-  --current-skill <current-default> --source <repo-url> --version <commit>
-qm scout run scout-plan.json --runner python --runner-arg path/to/isolated_runner.py
-qm scout report scout-plan.json scout-trials.jsonl
-qm scout review scout-evidence.json reviewer-votes.json --author <owner>
-```
-
-- **Reproducible.** Plans pin the candidate's content hash and randomize repeated paired jobs; Scout re-hashes before execution and rejects plans whose inputs changed.
-- **Honest.** Reports keep quality, completion, selection accuracy, reliability, time, tokens, cost, safety findings, confidence intervals, and known limitations — instead of hiding trade-offs in one score.
-- **Provider-neutral.** Execution crosses a JSON stdin/stdout runner seam, so you run Copilot, Claude, or Codex in your own ephemeral least-privilege worker.
-- **Human-decided.** A blinded packet is scored by three independent reviewers; two accepts approve, any substantiated safety veto blocks. Scout never changes a skill's state itself.
-
-See [`docs/SCOUTING.md`](./docs/SCOUTING.md) for schemas, runner integration, and trust boundaries.
-
-## How it works
-
-```mermaid
-flowchart LR
-    A[Project intent + style] --> B[Intent Compiler]
-    B --> C[Active loadout ~30 skills]
-    C --> D[Run tasks]
-    D --> E[Usage telemetry + feedback]
-    E --> F[Policy Engine - proposals only]
-    F --> G[Human approval gate]
-    G --> H[Update registry / state]
-    H --> C
-    F -. capability gap .-> I[Authoring arm]
-    I --> H
-```
-
-1. **Registry** — indexes every skill on disk with state, description, and last-used timestamp.
-2. **Intent compiler** — selects the active set from your project intent, near the ~30-skill sweet spot.
-3. **Telemetry** — logs which skills actually fire, via hooks. Local-only.
-4. **Historical dictionary** — first/last seen, usage and selection counts, transitions, useful intents.
-5. **Policy engine** — *proposes* demotions, promotions, and authoring. Never executes.
-6. **Human gate** — batched approvals; deletion only after long-demoted **and** explicit confirmation.
-7. **Authoring arm** — hands genuine gaps to `skill-creator` as probationary skills.
-
-Local state lives under `~/.quartermaster/` (override with `QM_HOME`). **Nothing ever leaves your machine.**
-
-Skills can optionally declare metadata in frontmatter (`qm-layer`, `qm-priority`, `qm-tags`, `qm-risk`, `qm-provides`, `qm-requires-guardrails`, `qm-conflicts-with`). All of it is optional — existing skills load unchanged.
-
-## Why non-destructive matters
-
-- **Demote, don't delete** — unused skills leave the model's attention and your context, but stay on disk and recoverable.
-- **One-command restore** — `qm restore <skill>` reverses any change; `qm revert` walks back the last automatic ones.
-- **Human-gated deletion** — `qm revert` deliberately refuses to undo a deletion or silently delete a skill.
-- **Full audit log** — every state change, including each revert, is inspectable via `qm log`.
+Every transition is logged and reversible. Demote and hide happen automatically; **delete never does**. Skills may declare optional metadata in frontmatter (`qm-layer`, `qm-priority`, `qm-tags`, `qm-risk`, `qm-provides`, `qm-requires-guardrails`, `qm-conflicts-with`); skills without it load unchanged.
 
 ## Roadmap
 
 | Phase | Scope | Status |
 |---|---|---|
-| **v0** | Lifecycle core: registry, state toggles, token-saved report | ✅ shipped |
-| **v0.2** | Usage telemetry + demote-if-unused proposals + batched approvals | ✅ shipped |
-| **v0.3** | Intent compiler (`qm compile`) | ◐ basic |
-| **v0.4** | Authoring arm: gap detection → `skill-creator` → probation → graduation | ✅ shipped |
-| **v0.5** | Natural-language feedback (`qm feedback`) | ✅ shipped |
-| **v0.6** | Skill Scout: paired A/B evidence, blinded review, integrity-bound artifacts | ✅ shipped |
-| **v1.0** | One-click revert, full audit trail, marketplace listing; semantic compiler + dashboard | ◐ partial |
+| **v0–v0.2** | Lifecycle core, usage telemetry, batched approvals | ✅ shipped |
+| **v0.3** | Intent compiler (`qm compile`) | ◐ keyword-based |
+| **v0.4–v0.5** | Authoring arm (gap → probation → graduate), natural-language feedback | ✅ shipped |
+| **v0.6** | Skill Scout: pinned paired trials, append-only evidence, blind 3-reviewer quorum | ✅ shipped |
+| **v1.0** | Semantic discovery index, prompt-injection & provenance gates, trust tiers, dashboard | ◐ in design |
 
 ## Project layout
 
@@ -180,16 +171,14 @@ Skills can optionally declare metadata in frontmatter (`qm-layer`, `qm-priority`
 .claude-plugin/   # plugin + marketplace manifests
 skills/           # the meta-skill that teaches Claude to drive qm
 commands/         # 14 /qm-* slash commands
-hooks/            # PreToolUse usage telemetry (local-only)
-qm/               # the pure-Python CLI (registry, policy, compile,
-                  #   transitions, scout, intake, conflicts, adapters, …)
+hooks/            # usage telemetry (local-only)
+qm/               # the pure-Python CLI — registry, policy, compile,
+                  #   transitions, scout, intake, conflicts, adapters, …
 benchmark/        # reproducible lifecycle, A/B, and scout benchmarks
-docs/             # SCOUTING.md + per-phase verification notes
+docs/             # SCOUTING.md, figures, per-phase verification notes
 bin/qm            # zero-install entry point
 tests/            # pytest suite — 128 tests
 ```
-
-Run the tests with `python3 -m pytest`.
 
 ## Contributing
 
@@ -201,4 +190,4 @@ MIT — see [LICENSE](./LICENSE).
 
 ---
 
-<p align="center"><sub>Quartermaster manages your skills. It never loses them.</sub></p>
+<p align="center"><sub>♥ The promise: every production skill is explainable, reproducible, and cared for.</sub></p>
